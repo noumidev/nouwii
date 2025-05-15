@@ -106,11 +106,11 @@ void memory_Map(u8* mem, const u32 addr, const u32 size, const int read, const i
     assert(common_IsAligned(size, SIZE_PAGE));
 
     const u32 firstPage = addr / SIZE_PAGE;
-    const u32 pageNum = size / SIZE_PAGE;
+    const u32 numPages = size / SIZE_PAGE;
 
-    printf("Mapping %X pages to %08X (%s/%s)\n", pageNum, addr, (read) ? "R" : "-", (write) ? "W" : "-");
+    printf("Mapping %X pages to %08X (%s/%s)\n", numPages, addr, (read) ? "R" : "-", (write) ? "W" : "-");
 
-    for (u32 page = firstPage; page < (firstPage + pageNum); page++) {
+    for (u32 page = firstPage; page < (firstPage + numPages); page++) {
         const u32 memIdx = page - firstPage;
 
         if (read) {
