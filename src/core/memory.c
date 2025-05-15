@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "common/bswap.h"
 #include "common/buffer.h"
 #include "common/file.h"
 
@@ -35,7 +36,7 @@ u##size memory_Read##size(const u32 addr) {                         \
     if (ctx.tableRd[page] != NULL) {                                \
         u##size data;                                               \
         memcpy(&data, &ctx.tableRd[page][offset], sizeof(u##size)); \
-        return data;                                                \
+        return common_Bswap##size(data);                            \
     }                                                               \
                                                                     \
     printf("Unmapped read##size (address: %08X)\n", addr);          \
@@ -48,7 +49,8 @@ void memory_Write##size(const u32 addr, const u##size data) {                 \
     const u32 offset = addr & (SIZE_PAGE - 1);                                \
                                                                               \
     if (ctx.tableWr[page] != NULL) {                                          \
-        memcpy(&ctx.tableWr[page][offset], &data, sizeof(u##size));           \
+        const u##size bswapData = common_Bswap##size(data);                   \
+        memcpy(&ctx.tableWr[page][offset], &bswapData, sizeof(u##size));      \
         return;                                                               \
     }                                                                         \
                                                                               \
