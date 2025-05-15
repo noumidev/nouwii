@@ -76,16 +76,14 @@ void memory_Initialize(const char* pathMem1, const char* pathMem2) {
 
     common_LoadFile(pathMem1, (void**)&ctx.mem1);
     common_LoadFile(pathMem2, (void**)&ctx.mem2);
-
-    memory_Map(ctx.mem1, BASE_MEM1, SIZE_MEM1, NOUWII_TRUE, NOUWII_TRUE);
-    memory_Map(ctx.mem2, BASE_MEM2, SIZE_MEM2, NOUWII_TRUE, NOUWII_TRUE);
 }
 
 void memory_Reset() {
     memset(ctx.tableRd, 0, SIZE_PAGE_TABLE * sizeof(usize));
     memset(ctx.tableWr, 0, SIZE_PAGE_TABLE * sizeof(usize));
-    memset(ctx.mem1, 0, SIZE_MEM1);
-    memset(ctx.mem2, 0, SIZE_MEM2);
+
+    memory_Map(ctx.mem1, BASE_MEM1, SIZE_MEM1, NOUWII_TRUE, NOUWII_TRUE);
+    memory_Map(ctx.mem2, BASE_MEM2, SIZE_MEM2, NOUWII_TRUE, NOUWII_TRUE);
 }
 
 void memory_Shutdown() {
