@@ -52,5 +52,7 @@ Mkfile.old
 dkms.conf
 
 # Dev
+.cache
 .vscode
+build
 out
