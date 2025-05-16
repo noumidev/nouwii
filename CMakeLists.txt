@@ -22,6 +22,7 @@ set(SOURCES
     src/common/buffer.c
     src/common/file.c
     src/core/memory.c
+    src/hw/broadway.c
     src/nouwii.c
 )
 
@@ -33,6 +34,7 @@ set(HEADERS
     include/common/file.h
     include/common/types.h
     include/core/memory.h
+    include/hw/broadway.h
     include/nouwii.h
 )
 

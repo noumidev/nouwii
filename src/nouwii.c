@@ -9,23 +9,36 @@
 
 #include "common/config.h"
 #include "core/memory.h"
+#include "hw/broadway.h"
 
 #define NUM_ARGS (1 + 2)
 
+#define MAX_CYCLES_TO_RUN (1024)
+
 void nouwii_Initialize(const common_Config* config) {
     memory_Initialize(config->pathMem1, config->pathMem2);
+
+    broadway_Initialize();
 }
 
 void nouwii_Reset() {
     memory_Reset();
+
+    broadway_Reset();
 }
 
 void nouwii_Shutdown() {
     memory_Shutdown();
+
+    broadway_Shutdown();
 }
 
 void nouwii_Run() {
+    while (NOUWII_TRUE) {
+        *broadway_GetCyclesToRun() = MAX_CYCLES_TO_RUN;
 
+        broadway_Run();
+    }
 }
 
 int main(int argc, char** argv) {
