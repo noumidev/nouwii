@@ -18,6 +18,7 @@ include_directories(${PROJECT_SOURCE_DIR}/include)
 
 # Set source files
 set(SOURCES
+    src/common/bit.c
     src/common/bswap.c
     src/common/buffer.c
     src/common/file.c
@@ -28,6 +29,7 @@ set(SOURCES
 
 # Set header files
 set(HEADERS
+    include/common/bit.h
     include/common/bswap.h
     include/common/buffer.h
     include/common/config.h
