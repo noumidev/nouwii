@@ -28,35 +28,35 @@ enum {
     SIZE_MEM2 = 0x4000000,
 };
 
-#define MAKEFUNC_READ(size)                                         \
-u##size memory_Read##size(const u32 addr) {                         \
-    const u32 page = addr / SIZE_PAGE;                              \
-    const u32 offset = addr & (SIZE_PAGE - 1);                      \
-                                                                    \
-    if (ctx.tableRd[page] != NULL) {                                \
-        u##size data;                                               \
-        memcpy(&data, &ctx.tableRd[page][offset], sizeof(u##size)); \
-        return common_Bswap##size(data);                            \
-    }                                                               \
-                                                                    \
-    printf("Unmapped read##size (address: %08X)\n", addr);          \
-    exit(1);                                                        \
-}                                                                   \
+#define MAKEFUNC_READ(size)                                           \
+u##size memory_Read##size(const u32 addr) {                           \
+    const u32 page = addr / SIZE_PAGE;                                \
+    const u32 offset = addr & (SIZE_PAGE - 1);                        \
+                                                                      \
+    if (ctx.tableRd[page] != NULL) {                                  \
+        u##size data;                                                 \
+        memcpy(&data, &ctx.tableRd[page][offset], sizeof(u##size));   \
+        return common_Bswap##size(data);                              \
+    }                                                                 \
+                                                                      \
+    printf("Unmapped read%d (address: %08X)\n", size, addr);          \
+    exit(1);                                                          \
+}                                                                     \
 
-#define MAKEFUNC_WRITE(size)                                                  \
-void memory_Write##size(const u32 addr, const u##size data) {                 \
-    const u32 page = addr / SIZE_PAGE;                                        \
-    const u32 offset = addr & (SIZE_PAGE - 1);                                \
-                                                                              \
-    if (ctx.tableWr[page] != NULL) {                                          \
-        const u##size bswapData = common_Bswap##size(data);                   \
-        memcpy(&ctx.tableWr[page][offset], &bswapData, sizeof(u##size));      \
-        return;                                                               \
-    }                                                                         \
-                                                                              \
-    printf("Unmapped write##size (address: %08X, data: %02X)\n", addr, data); \
-    exit(1);                                                                  \
-}                                                                             \
+#define MAKEFUNC_WRITE(size)                                                    \
+void memory_Write##size(const u32 addr, const u##size data) {                   \
+    const u32 page = addr / SIZE_PAGE;                                          \
+    const u32 offset = addr & (SIZE_PAGE - 1);                                  \
+                                                                                \
+    if (ctx.tableWr[page] != NULL) {                                            \
+        const u##size bswapData = common_Bswap##size(data);                     \
+        memcpy(&ctx.tableWr[page][offset], &bswapData, sizeof(u##size));        \
+        return;                                                                 \
+    }                                                                           \
+                                                                                \
+    printf("Unmapped write%d (address: %08X, data: %02X)\n", size, addr, data); \
+    exit(1);                                                                    \
+}                                                                               \
 
 typedef struct Context {
     u8** tableRd;
