@@ -10,6 +10,7 @@
 #include "common/config.h"
 #include "core/memory.h"
 #include "hw/broadway.h"
+#include "hw/pi.h"
 
 #define NUM_ARGS (1 + 2)
 
@@ -19,18 +20,21 @@ void nouwii_Initialize(const common_Config* config) {
     memory_Initialize(config->pathMem1, config->pathMem2);
 
     broadway_Initialize();
+    pi_Initialize();
 }
 
 void nouwii_Reset() {
     memory_Reset();
 
     broadway_Reset();
+    pi_Reset();
 }
 
 void nouwii_Shutdown() {
     memory_Shutdown();
 
     broadway_Shutdown();
+    pi_Shutdown();
 }
 
 void nouwii_Run() {
