@@ -13,18 +13,21 @@
 #include "common/bswap.h"
 #include "common/buffer.h"
 #include "common/file.h"
+#include "hw/pi.h"
 
 #define SIZE_ADDRESS_SPACE (0x100000000)
 #define SIZE_PAGE (0x1000)
 #define SIZE_PAGE_TABLE (SIZE_ADDRESS_SPACE / SIZE_PAGE)
 
 enum {
-    BASE_MEM1 = 0,
+    BASE_MEM1 = 0x00000000,
+    BASE_PI   = 0x0C003000,
     BASE_MEM2 = 0x10000000,
 };
 
 enum {
     SIZE_MEM1 = 0x1800000,
+    SIZE_PI   = 0x0001000,
     SIZE_MEM2 = 0x4000000,
 };
 
@@ -39,9 +42,18 @@ u##size memory_Read##size(const u32 addr) {                           \
         return common_Bswap##size(data);                              \
     }                                                                 \
                                                                       \
-    printf("Unmapped read%d (address: %08X)\n", size, addr);          \
-    exit(1);                                                          \
+    return ReadIo##size(addr);                                        \
 }                                                                     \
+
+#define MAKEFUNC_READIO(size)                                \
+u##size ReadIo##size(const u32 addr) {                       \
+    if ((addr & ~(SIZE_PI - 1)) == BASE_PI) {                \
+        return pi_ReadIo##size(addr);                        \
+    }                                                        \
+                                                             \
+    printf("Unmapped read%d (address: %08X)\n", size, addr); \
+    exit(1);                                                 \
+}                                                            \
 
 #define MAKEFUNC_WRITE(size)                                                    \
 void memory_Write##size(const u32 addr, const u##size data) {                   \
@@ -92,6 +104,11 @@ void memory_Shutdown() {
     free(ctx.mem1);
     free(ctx.mem2);
 }
+
+MAKEFUNC_READIO(8)
+MAKEFUNC_READIO(16)
+MAKEFUNC_READIO(32)
+MAKEFUNC_READIO(64)
 
 MAKEFUNC_READ(8)
 MAKEFUNC_READ(16)
