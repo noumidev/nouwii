@@ -17,10 +17,12 @@ void memory_Shutdown();
 MAKEDECL_READ(8)
 MAKEDECL_READ(16)
 MAKEDECL_READ(32)
+MAKEDECL_READ(64)
 
 MAKEDECL_WRITE(8)
 MAKEDECL_WRITE(16)
 MAKEDECL_WRITE(32)
+MAKEDECL_WRITE(64)
 
 void memory_Map(u8* mem, const u32 addr, const u32 size, const int read, const int write);
 

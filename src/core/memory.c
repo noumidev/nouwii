@@ -96,10 +96,12 @@ void memory_Shutdown() {
 MAKEFUNC_READ(8)
 MAKEFUNC_READ(16)
 MAKEFUNC_READ(32)
+MAKEFUNC_READ(64)
 
 MAKEFUNC_WRITE(8)
 MAKEFUNC_WRITE(16)
 MAKEFUNC_WRITE(32)
+MAKEFUNC_WRITE(64)
 
 void memory_Map(u8* mem, const u32 addr, const u32 size, const int read, const int write) {
     assert(common_IsAligned(addr, SIZE_PAGE));
