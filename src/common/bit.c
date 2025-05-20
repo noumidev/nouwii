@@ -7,6 +7,20 @@
 
 #include <string.h>
 
+#define MAKEFUNC_FROMF(size)                     \
+u##size common_FromF##size(const f##size data) { \
+    u##size n;                                   \
+    memcpy(&n, &data, sizeof(n));                \
+    return n;                                    \
+}                                                \
+
+#define MAKEFUNC_TOF(size)                     \
+f##size common_ToF##size(const u##size data) { \
+    f##size f;                                 \
+    memcpy(&f, &data, sizeof(f));              \
+    return f;                                  \
+}                                              \
+
 u32 common_Clz(const u32 data) {
     for (u32 i = 0; i < 32; i++) {
         if ((data & (1 << (31 - i))) != 0) {
@@ -25,18 +39,8 @@ u32 common_Rotl(const u32 data, const int amt) {
     return (data << (amt & 31)) | (data >> (32 - (amt & 31)));
 }
 
-f32 common_ToF32(const u32 data) {
-    f32 f;
+MAKEFUNC_FROMF(32)
+MAKEFUNC_FROMF(64)
 
-    memcpy(&f, &data, sizeof(f));
-
-    return f;
-}
-
-f64 common_ToF64(const u64 data) {
-    f64 f;
-
-    memcpy(&f, &data, sizeof(f));
-
-    return f;
-}
+MAKEFUNC_TOF(32)
+MAKEFUNC_TOF(64)
