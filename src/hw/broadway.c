@@ -13,6 +13,7 @@
 
 #include "common/bit.h"
 #include "common/types.h"
+
 #include "core/memory.h"
 
 #define BROADWAY_DEBUG

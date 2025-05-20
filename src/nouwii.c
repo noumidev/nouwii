@@ -8,7 +8,9 @@
 #include <stdio.h>
 
 #include "common/config.h"
+
 #include "core/memory.h"
+
 #include "hw/broadway.h"
 #include "hw/pi.h"
 
