@@ -15,6 +15,7 @@
 #include "common/file.h"
 
 #include "hw/hollywood.h"
+#include "hw/mi.h"
 #include "hw/pi.h"
 
 #define SIZE_ADDRESS_SPACE (0x100000000)
@@ -24,6 +25,7 @@
 enum {
     BASE_MEM1 = 0x00000000,
     BASE_PI   = 0x0C003000,
+    BASE_MI   = 0x0C004000,
     BASE_HW   = 0x0D000000,
     BASE_MEM2 = 0x10000000,
 };
@@ -31,6 +33,7 @@ enum {
 enum {
     SIZE_MEM1 = 0x1800000,
     SIZE_PI   = 0x0001000,
+    SIZE_MI   = 0x0000080,
     SIZE_HW   = 0x0000400,
     SIZE_MEM2 = 0x4000000,
 };
@@ -53,6 +56,10 @@ u##size memory_Read##size(const u32 addr) {                           \
 u##size ReadIo##size(const u32 addr) {                       \
     if ((addr & ~(SIZE_PI - 1)) == BASE_PI) {                \
         return pi_ReadIo##size(addr);                        \
+    }                                                        \
+                                                             \
+    if ((addr & ~(SIZE_MI - 1)) == BASE_MI) {                \
+        return mi_ReadIo##size(addr);                        \
     }                                                        \
                                                              \
     if ((addr & ~(SIZE_HW - 1)) == BASE_HW) {                \
@@ -81,6 +88,11 @@ void memory_Write##size(const u32 addr, const u##size data) {                   
 void WriteIo##size(const u32 addr, const u##size data) {                        \
     if ((addr & ~(SIZE_PI - 1)) == BASE_PI) {                                   \
         pi_WriteIo##size(addr, data);                                           \
+        return;                                                                 \
+    }                                                                           \
+                                                                                \
+    if ((addr & ~(SIZE_MI - 1)) == BASE_MI) {                                   \
+        mi_WriteIo##size(addr, data);                                           \
         return;                                                                 \
     }                                                                           \
                                                                                 \
