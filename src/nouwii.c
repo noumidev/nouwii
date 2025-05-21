@@ -13,6 +13,7 @@
 
 #include "hw/ai.h"
 #include "hw/broadway.h"
+#include "hw/di.h"
 #include "hw/dsp.h"
 #include "hw/exi.h"
 #include "hw/hollywood.h"
@@ -28,6 +29,7 @@ void nouwii_Initialize(const common_Config* config) {
 
     ai_Initialize();
     broadway_Initialize();
+    di_Initialize();
     dsp_Initialize();
     exi_Initialize();
     hollywood_Initialize();
@@ -40,6 +42,7 @@ void nouwii_Reset() {
 
     ai_Reset();
     broadway_Reset();
+    di_Reset();
     dsp_Reset();
     exi_Reset();
     hollywood_Reset();
@@ -52,6 +55,7 @@ void nouwii_Shutdown() {
 
     ai_Shutdown();
     broadway_Shutdown();
+    di_Shutdown();
     dsp_Shutdown();
     exi_Shutdown();
     hollywood_Shutdown();

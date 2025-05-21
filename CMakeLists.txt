@@ -25,6 +25,7 @@ set(SOURCES
     src/core/memory.c
     src/hw/ai.c
     src/hw/broadway.c
+    src/hw/di.c
     src/hw/dsp.c
     src/hw/exi.c
     src/hw/hollywood.c
@@ -44,6 +45,7 @@ set(HEADERS
     include/core/memory.h
     include/hw/ai.h
     include/hw/broadway.h
+    include/hw/di.h
     include/hw/dsp.h
     include/hw/exi.h
     include/hw/hollywood.h
