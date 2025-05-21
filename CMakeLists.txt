@@ -26,6 +26,7 @@ set(SOURCES
     src/hw/ai.c
     src/hw/broadway.c
     src/hw/dsp.c
+    src/hw/exi.c
     src/hw/hollywood.c
     src/hw/mi.c
     src/hw/pi.c
@@ -44,6 +45,7 @@ set(HEADERS
     include/hw/ai.h
     include/hw/broadway.h
     include/hw/dsp.h
+    include/hw/exi.h
     include/hw/hollywood.h
     include/hw/mi.h
     include/hw/pi.h
