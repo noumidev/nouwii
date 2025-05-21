@@ -67,6 +67,16 @@ void memory_Write##size(const u32 addr, const u##size data) {                   
         return;                                                                 \
     }                                                                           \
                                                                                 \
+    WriteIo##size(addr, data);                                                  \
+}                                                                               \
+
+#define MAKEFUNC_WRITEIO(size)                                                  \
+void WriteIo##size(const u32 addr, const u##size data) {                        \
+    if ((addr & ~(SIZE_PI - 1)) == BASE_PI) {                                   \
+        pi_WriteIo##size(addr, data);                                           \
+        return;                                                                 \
+    }                                                                           \
+                                                                                \
     printf("Unmapped write%d (address: %08X, data: %02X)\n", size, addr, data); \
     exit(1);                                                                    \
 }                                                                               \
@@ -115,6 +125,11 @@ MAKEFUNC_READ(8)
 MAKEFUNC_READ(16)
 MAKEFUNC_READ(32)
 MAKEFUNC_READ(64)
+
+MAKEFUNC_WRITEIO(8)
+MAKEFUNC_WRITEIO(16)
+MAKEFUNC_WRITEIO(32)
+MAKEFUNC_WRITEIO(64)
 
 MAKEFUNC_WRITE(8)
 MAKEFUNC_WRITE(16)
