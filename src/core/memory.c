@@ -14,6 +14,7 @@
 #include "common/buffer.h"
 #include "common/file.h"
 
+#include "hw/hollywood.h"
 #include "hw/pi.h"
 
 #define SIZE_ADDRESS_SPACE (0x100000000)
@@ -23,12 +24,14 @@
 enum {
     BASE_MEM1 = 0x00000000,
     BASE_PI   = 0x0C003000,
+    BASE_HW   = 0x0D000000,
     BASE_MEM2 = 0x10000000,
 };
 
 enum {
     SIZE_MEM1 = 0x1800000,
     SIZE_PI   = 0x0001000,
+    SIZE_HW   = 0x0000400,
     SIZE_MEM2 = 0x4000000,
 };
 
@@ -50,6 +53,10 @@ u##size memory_Read##size(const u32 addr) {                           \
 u##size ReadIo##size(const u32 addr) {                       \
     if ((addr & ~(SIZE_PI - 1)) == BASE_PI) {                \
         return pi_ReadIo##size(addr);                        \
+    }                                                        \
+                                                             \
+    if ((addr & ~(SIZE_HW - 1)) == BASE_HW) {                \
+        return hollywood_ReadIo##size(addr);                 \
     }                                                        \
                                                              \
     printf("Unmapped read%d (address: %08X)\n", size, addr); \
@@ -74,6 +81,11 @@ void memory_Write##size(const u32 addr, const u##size data) {                   
 void WriteIo##size(const u32 addr, const u##size data) {                        \
     if ((addr & ~(SIZE_PI - 1)) == BASE_PI) {                                   \
         pi_WriteIo##size(addr, data);                                           \
+        return;                                                                 \
+    }                                                                           \
+                                                                                \
+    if ((addr & ~(SIZE_HW - 1)) == BASE_HW) {                                   \
+        hollywood_WriteIo##size(addr, data);                                    \
         return;                                                                 \
     }                                                                           \
                                                                                 \
