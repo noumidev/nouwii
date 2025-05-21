@@ -14,6 +14,7 @@
 #include "common/buffer.h"
 #include "common/file.h"
 
+#include "hw/dsp.h"
 #include "hw/hollywood.h"
 #include "hw/mi.h"
 #include "hw/pi.h"
@@ -26,6 +27,7 @@ enum {
     BASE_MEM1 = 0x00000000,
     BASE_PI   = 0x0C003000,
     BASE_MI   = 0x0C004000,
+    BASE_DSP  = 0x0C005000,
     BASE_HW   = 0x0D000000,
     BASE_MEM2 = 0x10000000,
 };
@@ -34,6 +36,7 @@ enum {
     SIZE_MEM1 = 0x1800000,
     SIZE_PI   = 0x0001000,
     SIZE_MI   = 0x0000080,
+    SIZE_DSP  = 0x0000200,
     SIZE_HW   = 0x0000400,
     SIZE_MEM2 = 0x4000000,
 };
@@ -60,6 +63,10 @@ u##size ReadIo##size(const u32 addr) {                       \
                                                              \
     if ((addr & ~(SIZE_MI - 1)) == BASE_MI) {                \
         return mi_ReadIo##size(addr);                        \
+    }                                                        \
+                                                             \
+    if ((addr & ~(SIZE_DSP - 1)) == BASE_DSP) {              \
+        return dsp_ReadIo##size(addr);                       \
     }                                                        \
                                                              \
     if ((addr & ~(SIZE_HW - 1)) == BASE_HW) {                \
@@ -93,6 +100,11 @@ void WriteIo##size(const u32 addr, const u##size data) {                        
                                                                                 \
     if ((addr & ~(SIZE_MI - 1)) == BASE_MI) {                                   \
         mi_WriteIo##size(addr, data);                                           \
+        return;                                                                 \
+    }                                                                           \
+                                                                                \
+    if ((addr & ~(SIZE_DSP - 1)) == BASE_DSP) {                                 \
+        dsp_WriteIo##size(addr, data);                                          \
         return;                                                                 \
     }                                                                           \
                                                                                 \
