@@ -12,6 +12,7 @@
 #include "core/memory.h"
 
 #include "hw/broadway.h"
+#include "hw/dsp.h"
 #include "hw/hollywood.h"
 #include "hw/mi.h"
 #include "hw/pi.h"
@@ -24,6 +25,7 @@ void nouwii_Initialize(const common_Config* config) {
     memory_Initialize(config->pathMem1, config->pathMem2);
 
     broadway_Initialize();
+    dsp_Initialize();
     hollywood_Initialize();
     mi_Initialize();
     pi_Initialize();
@@ -33,6 +35,7 @@ void nouwii_Reset() {
     memory_Reset();
 
     broadway_Reset();
+    dsp_Reset();
     hollywood_Reset();
     mi_Reset();
     pi_Reset();
@@ -42,6 +45,7 @@ void nouwii_Shutdown() {
     memory_Shutdown();
 
     broadway_Shutdown();
+    dsp_Shutdown();
     hollywood_Shutdown();
     mi_Shutdown();
     pi_Shutdown();
