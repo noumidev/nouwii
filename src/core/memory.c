@@ -21,6 +21,7 @@
 #include "hw/hollywood.h"
 #include "hw/mi.h"
 #include "hw/pi.h"
+#include "hw/vi.h"
 
 #define SIZE_ADDRESS_SPACE (0x100000000)
 #define SIZE_PAGE (0x1000)
@@ -28,6 +29,7 @@
 
 enum {
     BASE_MEM1 = 0x00000000,
+    BASE_VI   = 0x0C002000,
     BASE_PI   = 0x0C003000,
     BASE_MI   = 0x0C004000,
     BASE_DSP  = 0x0C005000,
@@ -40,6 +42,7 @@ enum {
 
 enum {
     SIZE_MEM1 = 0x1800000,
+    SIZE_VI   = 0x0000100,
     SIZE_PI   = 0x0001000,
     SIZE_MI   = 0x0000080,
     SIZE_DSP  = 0x0000200,
@@ -66,6 +69,10 @@ u##size memory_Read##size(const u32 addr) {                           \
 
 #define MAKEFUNC_READIO(size)                                \
 u##size ReadIo##size(const u32 addr) {                       \
+    if ((addr & ~(SIZE_VI - 1)) == BASE_VI) {                \
+        return vi_ReadIo##size(addr);                        \
+    }                                                        \
+                                                             \
     if ((addr & ~(SIZE_PI - 1)) == BASE_PI) {                \
         return pi_ReadIo##size(addr);                        \
     }                                                        \
@@ -114,6 +121,11 @@ void memory_Write##size(const u32 addr, const u##size data) {                   
 
 #define MAKEFUNC_WRITEIO(size)                                                  \
 void WriteIo##size(const u32 addr, const u##size data) {                        \
+    if ((addr & ~(SIZE_VI - 1)) == BASE_VI) {                                   \
+        vi_WriteIo##size(addr, data);                                           \
+        return;                                                                 \
+    }                                                                           \
+                                                                                \
     if ((addr & ~(SIZE_PI - 1)) == BASE_PI) {                                   \
         pi_WriteIo##size(addr, data);                                           \
         return;                                                                 \
