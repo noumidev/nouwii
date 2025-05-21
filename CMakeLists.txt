@@ -23,6 +23,7 @@ set(SOURCES
     src/common/buffer.c
     src/common/file.c
     src/core/memory.c
+    src/hw/ai.c
     src/hw/broadway.c
     src/hw/dsp.c
     src/hw/hollywood.c
@@ -40,6 +41,7 @@ set(HEADERS
     include/common/file.h
     include/common/types.h
     include/core/memory.h
+    include/hw/ai.h
     include/hw/broadway.h
     include/hw/dsp.h
     include/hw/hollywood.h
