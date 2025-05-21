@@ -19,6 +19,7 @@
 #include "hw/hollywood.h"
 #include "hw/mi.h"
 #include "hw/pi.h"
+#include "hw/vi.h"
 
 #define NUM_ARGS (1 + 2)
 
@@ -35,6 +36,7 @@ void nouwii_Initialize(const common_Config* config) {
     hollywood_Initialize();
     mi_Initialize();
     pi_Initialize();
+    vi_Initialize();
 }
 
 void nouwii_Reset() {
@@ -48,6 +50,7 @@ void nouwii_Reset() {
     hollywood_Reset();
     mi_Reset();
     pi_Reset();
+    vi_Reset();
 }
 
 void nouwii_Shutdown() {
@@ -61,6 +64,7 @@ void nouwii_Shutdown() {
     hollywood_Shutdown();
     mi_Shutdown();
     pi_Shutdown();
+    vi_Shutdown();
 }
 
 void nouwii_Run() {

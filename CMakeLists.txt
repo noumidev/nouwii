@@ -31,6 +31,7 @@ set(SOURCES
     src/hw/hollywood.c
     src/hw/mi.c
     src/hw/pi.c
+    src/hw/vi.c
     src/nouwii.c
 )
 
@@ -51,6 +52,7 @@ set(HEADERS
     include/hw/hollywood.h
     include/hw/mi.h
     include/hw/pi.h
+    include/hw/vi.h
     include/nouwii.h
 )
 
