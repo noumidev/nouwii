@@ -22,6 +22,7 @@
 #define NUM_FPRS (32)
 #define NUM_BATS (8)
 #define NUM_GQRS (8)
+#define NUM_PMCS (4)
 #define NUM_CRS  (8)
 #define NUM_PS   (2)
 
@@ -43,10 +44,13 @@ enum {
     PRIMARY_ORIS         = 25,
     PRIMARY_REGISTER     = 31,
     PRIMARY_LWZ          = 32,
+    PRIMARY_LWZU         = 33,
     PRIMARY_LBZ          = 34,
+    PRIMARY_LBZU         = 35,
     PRIMARY_STW          = 36,
     PRIMARY_STWU         = 37,
     PRIMARY_STB          = 38,
+    PRIMARY_STBU         = 39,
     PRIMARY_STH          = 44,
     PRIMARY_LFS          = 48,
     PRIMARY_LFD          = 50,
@@ -57,22 +61,31 @@ enum {
 };
 
 enum {
+    SECONDARY_CMP   =   0,
+    SECONDARY_ADDC  =  10,
     SECONDARY_LWZX  =  23,
+    SECONDARY_SLW   =  24,
+    SECONDARY_AND   =  28,
     SECONDARY_CMPL  =  32,
+    SECONDARY_SUBF  =  40,
     SECONDARY_MFMSR =  83,
+    SECONDARY_DCBF  =  86,
     SECONDARY_NOR   = 124,
+    SECONDARY_ADDE  = 138,
     SECONDARY_MTMSR = 146,
     SECONDARY_STWX  = 151,
     SECONDARY_MTSR  = 210,
     SECONDARY_MULLW = 235,
     SECONDARY_ADD   = 266,
     SECONDARY_MFSPR = 339,
+    SECONDARY_MFTB  = 371,
     SECONDARY_STHX  = 407,
     SECONDARY_OR    = 444,
     SECONDARY_MTSPR = 467,
     SECONDARY_DIVW  = 491,
     SECONDARY_SYNC  = 598,
     SECONDARY_EXTSB = 954,
+    SECONDARY_ICBI  = 982,
 };
 
 enum {
@@ -89,14 +102,17 @@ enum {
 };
 
 enum {
-    FLOAT_FMR   =  72,
-    FLOAT_MTFSF = 711,
+    FLOAT_MTFSB1 =  38,
+    FLOAT_FMR    =  72,
+    FLOAT_MTFSF  = 711,
 };
 
 enum {
     SPR_XER    =    1,
     SPR_LR     =    8,
     SPR_CTR    =    9,
+    SPR_TBL    =  268,
+    SPR_TBU    =  269,
     SPR_IBAT0U =  528,
     SPR_IBAT3L =  535,
     SPR_DBAT0U =  536,
@@ -108,7 +124,14 @@ enum {
     SPR_GQR0   =  912,
     SPR_GQR7   =  919,
     SPR_HID2   =  920,
+    SPR_MMCR0  =  952,
+    SPR_PMC1   =  953,
+    SPR_PMC2   =  954,
+    SPR_MMCR1  =  956,
+    SPR_PMC3   =  957,
+    SPR_PMC4   =  958,
     SPR_HID0   = 1008,
+    SPR_HID4   = 1011,
     SPR_L2CR   = 1017,
 };
 
@@ -197,8 +220,15 @@ static u32 SetBits(const u32 n, const u32 start, const u32 end, const u32 data) 
 #define   XER (ctx.sprs.xer)
 #define   CTR (ctx.sprs.ctr)
 #define    LR (ctx.sprs.lr)
+#define   TBR (ctx.sprs.tbr.raw)
+#define   TBL (ctx.sprs.tbr.tbl)
+#define   TBU (ctx.sprs.tbr.tbu)
 #define  HID0 (ctx.sprs.hid0)
 #define  HID2 (ctx.sprs.hid2)
+#define  HID4 (ctx.sprs.hid4)
+#define MMCR0 (ctx.sprs.mmcr0)
+#define MMCR1 (ctx.sprs.mmcr1)
+#define   PMC (ctx.sprs.pmc)
 #define DBATL (ctx.sprs.dbatl)
 #define DBATU (ctx.sprs.dbatu)
 #define IBATL (ctx.sprs.ibatl)
@@ -242,6 +272,15 @@ typedef union Batu {
     };
 } Batu;
 
+typedef union Counter {
+    u32 raw;
+
+    struct {
+        u32 counter : 31;
+        u32      ov :  1;
+    };
+} Counter;
+
 typedef struct SpecialRegs {
     union {
         u32 raw;
@@ -254,6 +293,15 @@ typedef struct SpecialRegs {
             u32        so :  1;
         };
     } xer;
+
+    union {
+        u64 raw;
+
+        struct {
+            u64 tbl : 32;
+            u64 tbu : 32;
+        };
+    } tbr;
 
     union {
         u32 raw;
@@ -317,6 +365,24 @@ typedef struct SpecialRegs {
         u32 raw;
 
         struct {
+            u32       : 20;
+            u32 l2cfi :  1;
+            u32 l2mum :  1;
+            u32   dbp :  1;
+            u32   lpe :  1;
+            u32   st0 :  1;
+            u32   sbe :  1;
+            u32       :  1;
+            u32   bpd :  2;
+            u32  l2fm :  2;
+            u32       :  1;
+        };
+    } hid4;
+
+    union {
+        u32 raw;
+
+        struct {
             u32  sttype : 3;
             u32         : 5;
             u32 stscale : 6;
@@ -343,6 +409,40 @@ typedef struct SpecialRegs {
             u32  l2e :  1; // L2 enable
         };
     } l2cr;
+
+    union {
+        u32 raw;
+
+        struct {
+            u32     pmc2select : 6; // PMC2 input select
+            u32     pmc1select : 7; // PMC1 input select
+            u32     pmctrigger : 1; // Trigger PMC2-4
+            u32  pmcintcontrol : 1; // Enable PMC2-4 interrupts
+            u32 pmc1intcontrol : 1; // Enable PMC1 interrupts
+            u32      threshold : 6;
+            u32  intonbittrans : 1; // Interrupt on transition
+            u32      rtcselect : 2; // TBL selection enable
+            u32       discount : 1; // Disable counting after interrupt
+            u32          enint : 1; // Enable interrupt
+            u32            dmr : 1; // Disable counting while MSR[PM] = 0
+            u32            dms : 1; // Disable counting while MSR[PM] = 1
+            u32             du : 1; // Disable counting in User mode
+            u32             dp : 1; // Disable counting in Supervisor mode
+            u32            dis : 1; // Disable counting
+        };
+    } mmcr0;
+
+    union {
+        u32 raw;
+
+        struct {
+            u32            : 22;
+            u32 pmc4select :  5;
+            u32 pmc3select :  5;
+        };
+    } mmcr1;
+
+    Counter pmc[NUM_PMCS];
 
     Batl dbatl[NUM_BATS], ibatl[NUM_BATS];
     Batu dbatu[NUM_BATS], ibatu[NUM_BATS];
@@ -432,7 +532,8 @@ static u32 Translate(const u32 addr, const int code) {
         batu = IBATU;
     }
 
-    for (int i = 0; i < NUM_BATS; i++) {
+    // Number of enabled BATs depends on HID4
+    for (int i = 0; i < (4 + 4 * HID4.sbe); i++) {
         const u32 length = batu[i].bl << 17;
 
         const u32 index = ADDR_SEGMENT | (ADDR_PAGE & ~length);
@@ -482,14 +583,51 @@ static u32 GetSpr(const u32 spr) {
             printf("CTR read\n");
 
             return CTR;
+        case SPR_TBL:
+            printf("TBL read\n");
+
+            return TBL;
+        case SPR_TBU:
+            printf("TBU read\n");
+
+            return TBU;
         case SPR_HID2:
             printf("HID2 read\n");
 
             return HID2.raw;
+        case SPR_MMCR0:
+            printf("MMCR0 read\n");
+
+            return MMCR0.raw;
+        case SPR_PMC1:
+            printf("PMC1 read\n");
+
+            return PMC[0].raw;
+        case SPR_PMC2:
+            printf("PMC2 read\n");
+
+            return PMC[1].raw;
+        case SPR_MMCR1:
+            printf("MMCR1 read\n");
+
+            return MMCR1.raw;
+        case SPR_PMC3:
+            printf("PMC3 read\n");
+
+            return PMC[2].raw;
+        case SPR_PMC4:
+            printf("PMC4 read\n");
+
+            return PMC[3].raw;
         case SPR_HID0:
             printf("HID0 read\n");
 
             return HID0.raw;
+        case SPR_HID4:
+            printf("HID4 read\n");
+
+            // Bit 31 is always set
+            return HID4.raw | (1U << 31);
         case SPR_L2CR:
             printf("L2CR read\n");
 
@@ -587,6 +725,36 @@ static void SetSpr(const u32 spr, const u32 data) {
                 printf("HID2 Quantized loadstores enabled\n");
             }
             break;
+        case SPR_MMCR0:
+            printf("MMCR0 write (data: %08X)\n", data);
+
+            MMCR0.raw = data;
+            break;
+        case SPR_PMC1:
+            printf("PMC1 write (data: %08X)\n", data);
+
+            PMC[0].raw = data;
+            break;
+        case SPR_PMC2:
+            printf("PMC2 write (data: %08X)\n", data);
+
+            PMC[1].raw = data;
+            break;
+        case SPR_MMCR1:
+            printf("MMCR1 write (data: %08X)\n", data);
+
+            MMCR1.raw = data;
+            break;
+        case SPR_PMC3:
+            printf("PMC3 write (data: %08X)\n", data);
+
+            PMC[2].raw = data;
+            break;
+        case SPR_PMC4:
+            printf("PMC4 write (data: %08X)\n", data);
+
+            PMC[3].raw = data;
+            break;
         case SPR_HID0:
             printf("HID0 write (data: %08X)\n", data);
 
@@ -611,6 +779,15 @@ static void SetSpr(const u32 spr, const u32 data) {
             // Clear flash invalidate bits
             HID0.dcfi = 0;
             HID0.icfi = 0;
+            break;
+        case SPR_HID4:
+            printf("HID4 write (data: %08X)\n", data);
+
+            HID4.raw = data;
+
+            if (HID4.sbe != 0) {
+                printf("HID4 secondary BATs enabled\n");
+            }
             break;
         case SPR_L2CR:
             printf("L2CR write (data: %08X)\n", data);
@@ -647,6 +824,38 @@ static void ADD(const u32 instr) {
 #endif
 }
 
+static void ADDC(const u32 instr) {
+    const u64 n = (u64)ctx.r[RA] + (u64)ctx.r[RB];
+
+    XER.ca = (n >> 32) & 1;
+
+    ctx.r[RD] = (u32)n;
+
+    if (RC) {
+        SetFlags(0, ctx.r[RD]);
+    }
+
+#ifdef BROADWAY_DEBUG
+    printf("PPC [%08X] addc%s r%u, r%u, r%u; r%u: %08X, xer: %08X\n", CIA, (RC) ? "." : "", RD, RA, RB, RD, ctx.r[RD], XER.raw);
+#endif
+}
+
+static void ADDE(const u32 instr) {
+    const u64 n = (u64)ctx.r[RA] + (u64)ctx.r[RB] + (u64)XER.ca;
+
+    XER.ca = (n >> 32) & 1;
+
+    ctx.r[RD] = (u32)n;
+
+    if (RC) {
+        SetFlags(0, ctx.r[RD]);
+    }
+
+#ifdef BROADWAY_DEBUG
+    printf("PPC [%08X] adde%s r%u, r%u, r%u; r%u: %08X, xer: %08X\n", CIA, (RC) ? "." : "", RD, RA, RB, RD, ctx.r[RD], XER.raw);
+#endif
+}
+
 static void ADDI(const u32 instr) {
     u32 n = SIMM;
 
@@ -671,7 +880,7 @@ static void ADDICrc(const u32 instr) {
     SetFlags(0, ctx.r[RD]);
 
 #ifdef BROADWAY_DEBUG
-    printf("PPC [%08X] addic. r%u, r%u, %X; r%u: %08X\n", CIA, RD, RA, UIMM, RD, ctx.r[RD]);
+    printf("PPC [%08X] addic. r%u, r%u, %X; r%u: %08X, xer: %08X\n", CIA, RD, RA, UIMM, RD, ctx.r[RD], XER.raw);
 #endif
 }
 
@@ -686,6 +895,18 @@ static void ADDIS(const u32 instr) {
 
 #ifdef BROADWAY_DEBUG
     printf("PPC [%08X] addis r%u, r%u, %X; r%u: %08X\n", CIA, RD, RA, UIMM, RD, ctx.r[RD]);
+#endif
+}
+
+static void AND(const u32 instr) {
+    ctx.r[RA] = ctx.r[RS] & ctx.r[RB];
+
+    if (RC) {
+        SetFlags(0, ctx.r[RA]);
+    }
+
+#ifdef BROADWAY_DEBUG
+    printf("PPC [%08X] and%s r%u, r%u, r%u; r%u: %08X\n", CIA, (RC) ? "." : "", RA, RS, RB, RA, ctx.r[RA]);
 #endif
 }
 
@@ -773,6 +994,29 @@ static void BCLR(const u32 instr) {
 #endif
 }
 
+void CMP(const u32 instr) {
+    assert(!L);
+
+    const i32 a = (i32)ctx.r[RA];
+    const i32 b = (i32)ctx.r[RB];
+
+    u32 n = XER.so;
+
+    if (a < b) {
+        n |= 1 << COND_LT;
+    } else if (a > b) {
+        n |= 1 << COND_GT;
+    } else {
+        n |= 1 << COND_EQ;
+    }
+
+    SetCr(CRFD, n);
+
+#ifdef BROADWAY_DEBUG
+    printf("PPC [%08X] cmp crf%u, %d, r%u, r%u; cr: %08X\n", CIA, CRFD, L, RA, RB, CR);
+#endif
+}
+
 void CMPI(const u32 instr) {
     assert(!L);
 
@@ -848,6 +1092,20 @@ static void CRXOR(const u32 instr) {
 #endif
 }
 
+static void DCBF(const u32 instr) {
+    u32 addr = ctx.r[RB];
+
+    if (RA != 0) {
+        addr += ctx.r[RA];
+    }
+
+    // TODO: Implement data cache?
+
+#ifdef BROADWAY_DEBUG
+    printf("PPC [%08X] dcbf r%u, r%u; flush block @ [%08X]\n", CIA, RA, RB, addr);
+#endif
+}
+
 static void DIVW(const u32 instr) {
     const i32 n = (i32)ctx.r[RA];
     const i32 d = (i32)ctx.r[RB];
@@ -893,6 +1151,20 @@ static void FMR(const u32 instr) {
 #endif
 }
 
+static void ICBI(const u32 instr) {
+    u32 addr = ctx.r[RB];
+
+    if (RA != 0) {
+        addr += ctx.r[RA];
+    }
+
+    // TODO: Implement instruction cache?
+
+#ifdef BROADWAY_DEBUG
+    printf("PPC [%08X] icbi r%u, r%u; invalidate block @ [%08X]\n", CIA, RA, RB, addr);
+#endif
+}
+
 static void ISYNC(const u32 instr) {
     (void)instr;
 
@@ -912,6 +1184,20 @@ static void LBZ(const u32 instr) {
 
 #ifdef BROADWAY_DEBUG
     printf("PPC [%08X] lbz r%u, %d(r%u); r%u: %08X [%08X]\n", CIA, RD, SIMM, RA, RD, ctx.r[RD], addr);
+#endif
+}
+
+static void LBZU(const u32 instr) {
+    assert(RA != 0);
+    assert(RA != RD);
+
+    const u32 addr = ctx.r[RA] + SIMM;
+
+    ctx.r[RD] = (u8)Read8(addr, NOUWII_FALSE);
+    ctx.r[RA] = addr;
+
+#ifdef BROADWAY_DEBUG
+    printf("PPC [%08X] lbzu r%u, %d(r%u); r%u: %08X [%08X]\n", CIA, RD, SIMM, RA, RD, ctx.r[RD], addr);
 #endif
 }
 
@@ -963,6 +1249,20 @@ static void LWZ(const u32 instr) {
 #endif
 }
 
+static void LWZU(const u32 instr) {
+    assert(RA != 0);
+    assert(RA != RD);
+
+    const u32 addr = ctx.r[RA] + SIMM;
+
+    ctx.r[RD] = Read32(addr, NOUWII_FALSE);
+    ctx.r[RA] = addr;
+
+#ifdef BROADWAY_DEBUG
+    printf("PPC [%08X] lwzu r%u, %d(r%u); r%u: %08X [%08X]\n", CIA, RD, SIMM, RA, RD, ctx.r[RD], addr);
+#endif
+}
+
 static void LWZX(const u32 instr) {
     u32 addr = ctx.r[RB];
 
@@ -990,6 +1290,24 @@ static void MFSPR(const u32 instr) {
 
 #ifdef BROADWAY_DEBUG
     printf("PPC [%08X] mfspr r%u, spr%u; r%u: %08X\n", CIA, RD, SPR, RD, ctx.r[RD]);
+#endif
+}
+
+static void MFTB(const u32 instr) {
+    ctx.r[RD] = GetSpr(SPR);
+
+#ifdef BROADWAY_DEBUG
+    printf("PPC [%08X] mftb r%u, spr%u; r%u: %08X\n", CIA, RD, SPR, RD, ctx.r[RD]);
+#endif
+}
+
+static void MTFSB1(const u32 instr) {
+    assert(!RC);
+
+    FPSCR = SetBits(FPSCR, RD, RD, 1);
+
+#ifdef BROADWAY_DEBUG
+    printf("PPC [%08X] mtfsb1 crb%u; fpscr: %08X\n", CIA, RD, FPSCR);
 #endif
 }
 
@@ -1221,6 +1539,36 @@ static void RLWINM(const u32 instr) {
 #endif
 }
 
+static void SLW(const u32 instr) {
+    const u32 n = ctx.r[RB] & 0x3F;
+
+    if (n >= 32) {
+        ctx.r[RA] = 0;
+    } else {
+        ctx.r[RA] = common_Rotl(ctx.r[RS], n) & GetMask(0, 31 - n);
+    }
+
+    if (RC) {
+        SetFlags(0, ctx.r[RA]);
+    }
+
+#ifdef BROADWAY_DEBUG
+    printf("PPC [%08X] slw%s r%u, r%u, r%u; r%u: %08X, cr: %08X\n", CIA, (RC) ? "." : "", RA, RS, RB, RA, ctx.r[RA], CR);
+#endif
+}
+
+static void SUBF(const u32 instr) {
+    ctx.r[RD] = ctx.r[RB] - ctx.r[RA];
+
+    if (RC) {
+        SetFlags(0, ctx.r[RD]);
+    }
+
+#ifdef BROADWAY_DEBUG
+    printf("PPC [%08X] subf%s r%u, r%u, r%u; r%u: %08X\n", CIA, (RC) ? "." : "", RD, RA, RB, RD, ctx.r[RD]);
+#endif
+}
+
 static void STB(const u32 instr) {
     u32 addr = SIMM;
 
@@ -1232,6 +1580,21 @@ static void STB(const u32 instr) {
 
 #ifdef BROADWAY_DEBUG
     printf("PPC [%08X] stb r%u, %d(r%u); [%08X]: %02X\n", CIA, RS, SIMM, RA, addr, (u8)ctx.r[RS]);
+#endif
+}
+
+static void STBU(const u32 instr) {
+    assert(RA != 0);
+
+    const u32 addr = SIMM + ctx.r[RA];
+    const u8 data = (u8)ctx.r[RS];
+
+    Write8(addr, data);
+
+    ctx.r[RA] = addr;
+
+#ifdef BROADWAY_DEBUG
+    printf("PPC [%08X] stbu r%u, %d(r%u); [%08X]: %02X\n", CIA, RS, SIMM, RA, addr, data);
 #endif
 }
 
@@ -1302,7 +1665,7 @@ static void STWU(const u32 instr) {
     ctx.r[RA] = addr;
 
 #ifdef BROADWAY_DEBUG
-    printf("PPC [%08X] stwu r%u, %d(r%u); [%08X]: %08X\n", CIA, RS, SIMM, RA, addr, ctx.r[RS]);
+    printf("PPC [%08X] stwu r%u, %d(r%u); [%08X]: %08X\n", CIA, RS, SIMM, RA, addr, data);
 #endif
 }
 
@@ -1402,17 +1765,38 @@ static void ExecInstr(const u32 instr) {
             break;
         case PRIMARY_REGISTER:
             switch (XO) {
+                case SECONDARY_CMP:
+                    CMP(instr);
+                    break;
+                case SECONDARY_ADDC:
+                    ADDC(instr);
+                    break;
                 case SECONDARY_LWZX:
                     LWZX(instr);
+                    break;
+                case SECONDARY_SLW:
+                    SLW(instr);
+                    break;
+                case SECONDARY_AND:
+                    AND(instr);
                     break;
                 case SECONDARY_CMPL:
                     CMPL(instr);
                     break;
+                case SECONDARY_SUBF:
+                    SUBF(instr);
+                    break;
                 case SECONDARY_MFMSR:
                     MFMSR(instr);
                     break;
+                case SECONDARY_DCBF:
+                    DCBF(instr);
+                    break;
                 case SECONDARY_NOR:
                     NOR(instr);
+                    break;
+                case SECONDARY_ADDE:
+                    ADDE(instr);
                     break;
                 case SECONDARY_MTMSR:
                     MTMSR(instr);
@@ -1432,6 +1816,9 @@ static void ExecInstr(const u32 instr) {
                 case SECONDARY_MFSPR:
                     MFSPR(instr);
                     break;
+                case SECONDARY_MFTB:
+                    MFTB(instr);
+                    break;
                 case SECONDARY_STHX:
                     STHX(instr);
                     break;
@@ -1450,6 +1837,9 @@ static void ExecInstr(const u32 instr) {
                 case SECONDARY_EXTSB:
                     EXTSB(instr);
                     break;
+                case SECONDARY_ICBI:
+                    ICBI(instr);
+                    break;
                 default:
                     printf("Unimplemented Broadway secondary opcode %u (IA: %08X, instruction: %08X)\n", XO, CIA, instr);
 
@@ -1459,8 +1849,14 @@ static void ExecInstr(const u32 instr) {
         case PRIMARY_LWZ:
             LWZ(instr);
             break;
+        case PRIMARY_LWZU:
+            LWZU(instr);
+            break;
         case PRIMARY_LBZ:
             LBZ(instr);
+            break;
+        case PRIMARY_LBZU:
+            LBZU(instr);
             break;
         case PRIMARY_STW:
             STW(instr);
@@ -1470,6 +1866,9 @@ static void ExecInstr(const u32 instr) {
             break;
         case PRIMARY_STB:
             STB(instr);
+            break;
+        case PRIMARY_STBU:
+            STBU(instr);
             break;
         case PRIMARY_STH:
             STH(instr);
@@ -1491,6 +1890,9 @@ static void ExecInstr(const u32 instr) {
             break;
         case PRIMARY_FLOAT:
             switch (XO) {
+                case FLOAT_MTFSB1:
+                    MTFSB1(instr);
+                    break;
                 case FLOAT_FMR:
                     FMR(instr);
                     break;
@@ -1507,6 +1909,18 @@ static void ExecInstr(const u32 instr) {
             printf("Unimplemented Broadway primary opcode %u (IA: %08X, instruction: %08X)\n", OPCD, CIA, instr);
 
             exit(1);
+    }
+}
+
+static void IncrementTbr() {
+    static int prescaler = 0;
+
+    prescaler++;
+
+    if (prescaler >= 12) {
+        prescaler = 0;
+
+        TBR++;
     }
 }
 
@@ -1533,6 +1947,8 @@ void broadway_Run() {
         const u32 instr = FetchInstr();
 
         ExecInstr(instr);
+
+        IncrementTbr();
     }
 }
 
