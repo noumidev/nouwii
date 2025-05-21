@@ -25,6 +25,7 @@ set(SOURCES
     src/core/memory.c
     src/hw/broadway.c
     src/hw/hollywood.c
+    src/hw/mi.c
     src/hw/pi.c
     src/nouwii.c
 )
@@ -40,6 +41,7 @@ set(HEADERS
     include/core/memory.h
     include/hw/broadway.h
     include/hw/hollywood.h
+    include/hw/mi.h
     include/hw/pi.h
     include/nouwii.h
 )
