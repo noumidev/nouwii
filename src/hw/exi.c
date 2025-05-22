@@ -27,14 +27,18 @@ void exi_WriteIo##size(const u32 addr, const u##size data) {                    
 }                                                                                        \
 
 enum {
-    EXI_CSR  = 0xD006800,
-    EXI_CR   = 0xD00680C,
-    EXI_DATA = 0xD006810,
+    EXI_CSR    = 0xD006800,
+    EXI_MAR    = 0xD006804,
+    EXI_LENGTH = 0xD006808,
+    EXI_CR     = 0xD00680C,
+    EXI_DATA   = 0xD006810,
 };
 
-#define  CSR (chn->csr)
-#define   CR (chn->cr)
-#define DATA (chn->data)
+#define    CSR (chn->csr)
+#define    MAR (chn->mar)
+#define LENGTH (chn->length)
+#define     CR (chn->cr)
+#define   DATA (chn->data)
 
 typedef struct Channel {
     union {
@@ -66,6 +70,8 @@ typedef struct Channel {
         };
     } cr;
 
+    u32 mar;
+    u32 length;
     u32 data;
 } Channel;
 
@@ -97,10 +103,22 @@ u32 exi_ReadIo32(const u32 addr) {
             printf("EXI_CSR%d read32\n", c);
 
             return CSR.raw;
+        case EXI_MAR:
+            printf("EXI_MAR%d read32\n", c);
+
+            return MAR;
+        case EXI_LENGTH:
+            printf("EXI_LENGTH%d read32\n", c);
+
+            return EXI_LENGTH;
         case EXI_CR:
             printf("EXI_CR%d read32\n", c);
 
             return CR.raw;
+        case EXI_DATA:
+            printf("EXI_DATA%d read32\n", c);
+
+            return DATA;
         default:
             printf("EXI Unimplemented read32 (address: %08X)\n", addr);
 
@@ -123,15 +141,27 @@ void exi_WriteIo32(const u32 addr, const u32 data) {
 
             CSR.raw = data;
             break;
+        case EXI_MAR:
+            printf("EXI_MAR%d write32 (data: %08X)\n", c, data);
+
+            MAR = data & ~0x1F;
+            break;
+        case EXI_LENGTH:
+            printf("EXI_LENGTH%d write32 (data: %08X)\n", c, data);
+
+            LENGTH = data & ~0x1F;
+            break;
         case EXI_CR:
             printf("EXI_CR%d write32 (data: %08X)\n", c, data);
 
             CR.raw = data;
 
             if (CR.tstart != 0) {
-                assert(CR.dma == 0);
-
-                printf("EXI channel %d immediate transfer (length: %u, data: %08X, rw: %u)\n", c, CR.tlen + 1, DATA, CR.rw);
+                if (CR.dma != 0) {
+                    printf("EXI channel %d DMA transfer (address: %08X, length: %u, rw: %u)\n", c, MAR, LENGTH, CR.rw);
+                } else {
+                    printf("EXI channel %d immediate transfer (length: %u, data: %08X, rw: %u)\n", c, CR.tlen + 1, DATA, CR.rw);
+                }
 
                 CR.tstart = 0;
             }
