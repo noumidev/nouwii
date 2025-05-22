@@ -16,7 +16,7 @@
 
 #include "core/memory.h"
 
-#define BROADWAY_DEBUG
+// #define BROADWAY_DEBUG
 
 #define NUM_GPRS (32)
 #define NUM_FPRS (32)
@@ -28,20 +28,28 @@
 
 #define INITIAL_PC (0x3400)
 
+#define MASK_MSR  (0x87C0FF73)
+#define MASK_SRR1 (0x783F0000)
+
 enum {
     PRIMARY_PAIREDSINGLE =  4,
     PRIMARY_MULLI        =  7,
+    PRIMARY_SUBFIC       =  8,
     PRIMARY_CMPLI        = 10,
     PRIMARY_CMPI         = 11,
     PRIMARY_ADDICrc      = 13,
     PRIMARY_ADDI         = 14,
     PRIMARY_ADDIS        = 15,
     PRIMARY_BC           = 16,
+    PRIMARY_SC           = 17,
     PRIMARY_B            = 18,
     PRIMARY_SYSTEM       = 19,
+    PRIMARY_RLWIMI       = 20,
     PRIMARY_RLWINM       = 21,
     PRIMARY_ORI          = 24,
     PRIMARY_ORIS         = 25,
+    PRIMARY_XORIS        = 27,
+    PRIMARY_ANDIrc       = 28,
     PRIMARY_REGISTER     = 31,
     PRIMARY_LWZ          = 32,
     PRIMARY_LWZU         = 33,
@@ -51,7 +59,10 @@ enum {
     PRIMARY_STWU         = 37,
     PRIMARY_STB          = 38,
     PRIMARY_STBU         = 39,
+    PRIMARY_LHZ          = 40,
     PRIMARY_STH          = 44,
+    PRIMARY_LMW          = 46,
+    PRIMARY_STMW         = 47,
     PRIMARY_LFS          = 48,
     PRIMARY_LFD          = 50,
     PRIMARY_STFS         = 52,
@@ -61,35 +72,49 @@ enum {
 };
 
 enum {
-    SECONDARY_CMP   =   0,
-    SECONDARY_ADDC  =  10,
-    SECONDARY_LWZX  =  23,
-    SECONDARY_SLW   =  24,
-    SECONDARY_AND   =  28,
-    SECONDARY_CMPL  =  32,
-    SECONDARY_SUBF  =  40,
-    SECONDARY_MFMSR =  83,
-    SECONDARY_DCBF  =  86,
-    SECONDARY_NOR   = 124,
-    SECONDARY_ADDE  = 138,
-    SECONDARY_MTMSR = 146,
-    SECONDARY_STWX  = 151,
-    SECONDARY_MTSR  = 210,
-    SECONDARY_MULLW = 235,
-    SECONDARY_ADD   = 266,
-    SECONDARY_MFSPR = 339,
-    SECONDARY_MFTB  = 371,
-    SECONDARY_STHX  = 407,
-    SECONDARY_OR    = 444,
-    SECONDARY_MTSPR = 467,
-    SECONDARY_DIVW  = 491,
-    SECONDARY_SYNC  = 598,
-    SECONDARY_EXTSB = 954,
-    SECONDARY_ICBI  = 982,
+    SECONDARY_CMP    =   0,
+    SECONDARY_SUBFC  =   8,
+    SECONDARY_ADDC   =  10,
+    SECONDARY_MULHWU =  11,
+    SECONDARY_LWZX   =  23,
+    SECONDARY_SLW    =  24,
+    SECONDARY_CNTLZW =  26,
+    SECONDARY_AND    =  28,
+    SECONDARY_CMPL   =  32,
+    SECONDARY_SUBF   =  40,
+    SECONDARY_ANDC   =  60,
+    SECONDARY_MFMSR  =  83,
+    SECONDARY_DCBF   =  86,
+    SECONDARY_NEG    = 104,
+    SECONDARY_NOR    = 124,
+    SECONDARY_SUBE   = 136,
+    SECONDARY_ADDE   = 138,
+    SECONDARY_MTMSR  = 146,
+    SECONDARY_STWX   = 151,
+    SECONDARY_ADDZE  = 202,
+    SECONDARY_MTSR   = 210,
+    SECONDARY_MULLW  = 235,
+    SECONDARY_ADD    = 266,
+    SECONDARY_LHZX   = 279,
+    SECONDARY_MFSPR  = 339,
+    SECONDARY_MFTB   = 371,
+    SECONDARY_STHX   = 407,
+    SECONDARY_OR     = 444,
+    SECONDARY_DIVWU  = 459,
+    SECONDARY_MTSPR  = 467,
+    SECONDARY_DCBI   = 470,
+    SECONDARY_DIVW   = 491,
+    SECONDARY_SRW    = 536,
+    SECONDARY_SYNC   = 598,
+    SECONDARY_SRAW   = 792,
+    SECONDARY_SRAWI  = 824,
+    SECONDARY_EXTSB  = 954,
+    SECONDARY_ICBI   = 982,
 };
 
 enum {
     SYSTEM_BCLR  =  16,
+    SYSTEM_RFI   =  50,
     SYSTEM_ISYNC = 150,
     SYSTEM_CRXOR = 193,
     SYSTEM_BCCTR = 528,
@@ -111,6 +136,7 @@ enum {
     SPR_XER    =    1,
     SPR_LR     =    8,
     SPR_CTR    =    9,
+    SPR_DEC    =   22,
     SPR_TBL    =  268,
     SPR_TBU    =  269,
     SPR_IBAT0U =  528,
@@ -220,6 +246,7 @@ static u32 SetBits(const u32 n, const u32 start, const u32 end, const u32 data) 
 #define   XER (ctx.sprs.xer)
 #define   CTR (ctx.sprs.ctr)
 #define    LR (ctx.sprs.lr)
+#define   DEC (ctx.sprs.dec)
 #define   TBR (ctx.sprs.tbr.raw)
 #define   TBL (ctx.sprs.tbr.tbl)
 #define   TBU (ctx.sprs.tbr.tbu)
@@ -235,6 +262,8 @@ static u32 SetBits(const u32 n, const u32 start, const u32 end, const u32 data) 
 #define IBATU (ctx.sprs.ibatu)
 #define   GQR (ctx.sprs.gqr)
 #define  L2CR (ctx.sprs.l2cr)
+#define  SRR0 (ctx.sprs.srr0)
+#define  SRR1 (ctx.sprs.srr1)
 
 #define    IA (ctx.ia)
 #define   CIA (ctx.cia)
@@ -244,6 +273,33 @@ static u32 SetBits(const u32 n, const u32 start, const u32 end, const u32 data) 
 
 #define PS0 ps[0]
 #define PS1 ps[1]
+
+typedef union Msr {
+    u32 raw;
+
+    struct {
+        u32  le :  1; // Little Endian
+        u32  ri :  1; // Recoverable interrupt
+        u32  pm :  1; // Process marked
+        u32     :  1;
+        u32  dr :  1; // Data address translation
+        u32  ir :  1; // Data address translation
+        u32  ip :  1; // Interrupt prefix
+        u32     :  1;
+        u32 fe1 :  1; // IEEE float exception mode 1
+        u32  be :  1; // Branch trace enable
+        u32  se :  1; // Single step enable
+        u32 fe0 :  1; // IEEE float exception mode 0
+        u32  me :  1; // Machine check enable
+        u32  fp :  1; // Float available
+        u32  pr :  1; // Privilege level
+        u32  ee :  1; // External interrupt enable
+        u32 ile :  1; // Interrupt Little Endian
+        u32     :  1;
+        u32 pow :  1; // Power management enable
+        u32     : 13;
+    };
+} Msr;
 
 typedef union Batl {
     u32 raw;
@@ -443,9 +499,13 @@ typedef struct SpecialRegs {
     } mmcr1;
 
     Counter pmc[NUM_PMCS];
+    Counter dec;
 
     Batl dbatl[NUM_BATS], ibatl[NUM_BATS];
     Batu dbatu[NUM_BATS], ibatu[NUM_BATS];
+
+    u32 srr0;
+    Msr srr1;
 
     u32 lr;
     u32 ctr;
@@ -466,32 +526,7 @@ typedef struct Context {
 
     SpecialRegs sprs;
 
-    union {
-        u32 raw;
-
-        struct {
-            u32  le :  1; // Little Endian
-            u32  ri :  1; // Recoverable interrupt
-            u32  pm :  1; // Process marked
-            u32     :  1;
-            u32  dr :  1; // Data address translation
-            u32  ir :  1; // Data address translation
-            u32  ip :  1; // Interrupt prefix
-            u32     :  1;
-            u32 fe1 :  1; // IEEE float exception mode 1
-            u32  be :  1; // Branch trace enable
-            u32  se :  1; // Single step enable
-            u32 fe0 :  1; // IEEE float exception mode 0
-            u32  me :  1; // Machine check enable
-            u32  fp :  1; // Float available
-            u32  pr :  1; // Privilege level
-            u32  ee :  1; // External interrupt enable
-            u32 ile :  1; // Interrupt Little Endian
-            u32     :  1;
-            u32 pow :  1; // Power management enable
-            u32     : 13;
-        };
-    } msr;
+    Msr msr;
 } Context;
 
 static Context ctx;
@@ -583,6 +618,10 @@ static u32 GetSpr(const u32 spr) {
             printf("CTR read\n");
 
             return CTR;
+        case SPR_DEC:
+            printf("DEC read\n");
+
+            return DEC.raw;
         case SPR_TBL:
             printf("TBL read\n");
 
@@ -707,6 +746,11 @@ static void SetSpr(const u32 spr, const u32 data) {
             printf("CTR write (data: %08X)\n", data);
 
             CTR = data;
+            break;
+        case SPR_DEC:
+            printf("DEC write (data: %08X)\n", data);
+
+            DEC.raw = data;
             break;
         case SPR_HID2:
             printf("HID2 write (data: %08X)\n", data);
@@ -898,6 +942,22 @@ static void ADDIS(const u32 instr) {
 #endif
 }
 
+static void ADDZE(const u32 instr) {
+    const u64 n = (u64)ctx.r[RA] + (u64)XER.ca;
+
+    XER.ca = (n >> 32) & 1;
+
+    ctx.r[RD] = (u32)n;
+
+    if (RC) {
+        SetFlags(0, ctx.r[RD]);
+    }
+
+#ifdef BROADWAY_DEBUG
+    printf("PPC [%08X] addze%s r%u, r%u; r%u: %08X, xer: %08X\n", CIA, (RC) ? "." : "", RD, RA, RD, ctx.r[RD], XER.raw);
+#endif
+}
+
 static void AND(const u32 instr) {
     ctx.r[RA] = ctx.r[RS] & ctx.r[RB];
 
@@ -907,6 +967,28 @@ static void AND(const u32 instr) {
 
 #ifdef BROADWAY_DEBUG
     printf("PPC [%08X] and%s r%u, r%u, r%u; r%u: %08X\n", CIA, (RC) ? "." : "", RA, RS, RB, RA, ctx.r[RA]);
+#endif
+}
+
+static void ANDC(const u32 instr) {
+    ctx.r[RA] = ctx.r[RS] & ~ctx.r[RB];
+
+    if (RC) {
+        SetFlags(0, ctx.r[RA]);
+    }
+
+#ifdef BROADWAY_DEBUG
+    printf("PPC [%08X] andc%s r%u, r%u, r%u; r%u: %08X\n", CIA, (RC) ? "." : "", RA, RS, RB, RA, ctx.r[RA]);
+#endif
+}
+
+static void ANDIrc(const u32 instr) {
+    ctx.r[RA] = ctx.r[RS] & UIMM;
+
+    SetFlags(0, ctx.r[RA]);
+
+#ifdef BROADWAY_DEBUG
+    printf("PPC [%08X] andi. r%u, r%u, %X; r%u: %08X\n", CIA, RA, RS, UIMM, RA, ctx.r[RA]);
 #endif
 }
 
@@ -1084,6 +1166,18 @@ void CMPLI(const u32 instr) {
 #endif
 }
 
+static void CNTLZW(const u32 instr) {
+    ctx.r[RA] = common_Clz(ctx.r[RS]);
+
+    if (RC) {
+        SetFlags(0, ctx.r[RA]);
+    }
+
+#ifdef BROADWAY_DEBUG
+    printf("PPC [%08X] cntlzw%s r%u, r%u; r%u: %08X\n", CIA, (RC) ? "." : "", RA, RS, RA, ctx.r[RA]);
+#endif
+}
+
 static void CRXOR(const u32 instr) {
     CR = SetBits(CR, RD, RD, GetBits(CR, RA, RA) ^ GetBits(CR, RB, RB));
 
@@ -1106,6 +1200,20 @@ static void DCBF(const u32 instr) {
 #endif
 }
 
+static void DCBI(const u32 instr) {
+    u32 addr = ctx.r[RB];
+
+    if (RA != 0) {
+        addr += ctx.r[RA];
+    }
+
+    // TODO: Implement data cache?
+
+#ifdef BROADWAY_DEBUG
+    printf("PPC [%08X] dcbf r%u, r%u; invalidate block @ [%08X]\n", CIA, RA, RB, addr);
+#endif
+}
+
 static void DIVW(const u32 instr) {
     const i32 n = (i32)ctx.r[RA];
     const i32 d = (i32)ctx.r[RB];
@@ -1121,6 +1229,23 @@ static void DIVW(const u32 instr) {
 
 #ifdef BROADWAY_DEBUG
     printf("PPC [%08X] divw%s r%u, r%u, r%u; r%u: %08X\n", CIA, (RC) ? "." : "", RD, RA, RB, RD, ctx.r[RD]);
+#endif
+}
+
+static void DIVWU(const u32 instr) {
+    const u32 n = ctx.r[RA];
+    const u32 d = ctx.r[RB];
+
+    assert(d != 0);
+
+    ctx.r[RD] = n / d;
+
+    if (RC) {
+        SetFlags(0, ctx.r[RD]);
+    }
+
+#ifdef BROADWAY_DEBUG
+    printf("PPC [%08X] divwu%s r%u, r%u, r%u; r%u: %08X\n", CIA, (RC) ? "." : "", RD, RA, RB, RD, ctx.r[RD]);
 #endif
 }
 
@@ -1232,6 +1357,54 @@ static void LFS(const u32 instr) {
 
 #ifdef BROADWAY_DEBUG
     printf("PPC [%08X] lfs f%u, %d(r%u); f%u: %lf [%08X]\n", CIA, RD, SIMM, RA, RD, ctx.fprs[RD].PS0, addr);
+#endif
+}
+
+static void LHZ(const u32 instr) {
+    u32 addr = SIMM;
+
+    if (RA != 0) {
+        addr += ctx.r[RA];
+    }
+
+    ctx.r[RD] = (u16)Read16(addr, NOUWII_FALSE);
+
+#ifdef BROADWAY_DEBUG
+    printf("PPC [%08X] lhz r%u, %d(r%u); r%u: %08X [%08X]\n", CIA, RD, SIMM, RA, RD, ctx.r[RD], addr);
+#endif
+}
+
+static void LHZX(const u32 instr) {
+    u32 addr = ctx.r[RB];
+
+    if (RA != 0) {
+        addr += ctx.r[RA];
+    }
+
+    ctx.r[RD] = (u32)Read16(addr, NOUWII_FALSE);
+
+#ifdef BROADWAY_DEBUG
+    printf("PPC [%08X] lhzx r%u, r%u, r%u; r%u: %08X [%08X]\n", CIA, RD, RA, RB, RD, ctx.r[RD], addr);
+#endif
+}
+
+static void LMW(const u32 instr) {
+    assert(RA < RD);
+
+    u32 addr = SIMM;
+
+    if (RA != 0) {
+        addr += ctx.r[RA];
+    }
+
+    for (int r = RD; r < NUM_GPRS; r++) {
+        ctx.r[r] = Read32(addr, NOUWII_FALSE);
+
+        addr += sizeof(u32);
+    }
+
+#ifdef BROADWAY_DEBUG
+    printf("PPC [%08X] lmw r%u, %d(r%u)\n", CIA, RS, SIMM, RA);
 #endif
 }
 
@@ -1350,6 +1523,18 @@ static void MTSR(const u32 instr) {
 #endif
 }
 
+static void MULHWU(const u32 instr) {
+    ctx.r[RD] = (u32)(((u64)ctx.r[RA] * (u64)ctx.r[RB]) >> 32);
+
+    if (RC) {
+        SetFlags(0, ctx.r[RD]);
+    }
+
+#ifdef BROADWAY_DEBUG
+    printf("PPC [%08X] mulhwu%s r%u, r%u, r%u; r%u: %08X\n", CIA, (RC) ? "." : "", RD, RA, RB, RD, ctx.r[RD]);
+#endif
+}
+
 static void MULLI(const u32 instr) {
     ctx.r[RD] = ctx.r[RA] * SIMM;
 
@@ -1367,6 +1552,18 @@ static void MULLW(const u32 instr) {
 
 #ifdef BROADWAY_DEBUG
     printf("PPC [%08X] mullw%s r%u, r%u, r%u; r%u: %08X\n", CIA, (RC) ? "." : "", RD, RA, RB, RD, ctx.r[RD]);
+#endif
+}
+
+static void NEG(const u32 instr) {
+    ctx.r[RD] = -ctx.r[RA];
+
+    if (RC) {
+        SetFlags(0, ctx.r[RD]);
+    }
+
+#ifdef BROADWAY_DEBUG
+    printf("PPC [%08X] neg%s r%u, r%u; r%u: %08X\n", CIA, (RC) ? "." : "", RD, RA, RD, ctx.r[RD]);
 #endif
 }
 
@@ -1527,6 +1724,20 @@ static void PSQST(const u32 instr) {
 #endif
 }
 
+static void RLWIMI(const u32 instr) {
+    const u32 m = GetMask(MB, ME);
+
+    ctx.r[RA] = (common_Rotl(ctx.r[RS], SH) & m) | (ctx.r[RA] & ~m);
+
+    if (RC) {
+        SetFlags(0, ctx.r[RA]);
+    }
+
+#ifdef BROADWAY_DEBUG
+    printf("PPC [%08X] rlwimi%s r%u, r%u, %u, %u, %u; r%u: %08X, cr: %08X\n", CIA, (RC) ? "." : "", RA, RS, SH, MB, ME, RA, ctx.r[RA], CR);
+#endif
+}
+
 static void RLWINM(const u32 instr) {
     ctx.r[RA] = common_Rotl(ctx.r[RS], SH) & GetMask(MB, ME);
 
@@ -1536,6 +1747,53 @@ static void RLWINM(const u32 instr) {
 
 #ifdef BROADWAY_DEBUG
     printf("PPC [%08X] rlwinm%s r%u, r%u, %u, %u, %u; r%u: %08X, cr: %08X\n", CIA, (RC) ? "." : "", RA, RS, SH, MB, ME, RA, ctx.r[RA], CR);
+#endif
+}
+
+static void RFI(const u32 instr) {
+    (void)instr;
+
+    printf("Broadway Return from interrupt\n");
+
+    MSR.raw &= ~MASK_MSR;
+    MSR.raw |= SRR1.raw & MASK_MSR;
+    
+    MSR.pow = 0;
+
+    IA = SRR0;
+
+#ifdef BROADWAY_DEBUG
+    printf("PPC [%08X] rfi; nia: %08X, msr: %08X\n", CIA, IA, MSR.raw);
+#endif
+}
+
+static void SC(const u32 instr) {
+    assert(GetBits(instr, 30, 30) != 0);
+
+    printf("Broadway System call exception (CIA: %08X)\n", CIA);
+
+    // Save IA and MSR
+    SRR0 = CIA + sizeof(u32);
+    SRR1.raw &= ~(MASK_SRR1 | MASK_MSR);
+    SRR1.raw |= MSR.raw & MASK_MSR;
+
+    MSR.le  = MSR.ile;
+    MSR.ri  = 0;
+    MSR.dr  = 0;
+    MSR.ir  = 0;
+    MSR.fe1 = 0;
+    MSR.be  = 0;
+    MSR.se  = 0;
+    MSR.fe0 = 0;
+    MSR.fp  = 0;
+    MSR.pr  = 0;
+    MSR.ee  = 0;
+    MSR.pow = 0;
+
+    IA = 0xC00;
+
+#ifdef BROADWAY_DEBUG
+    printf("PPC [%08X] sc; srr0: %08X, srr1: %08X\n", CIA, SRR0, SRR1.raw);
 #endif
 }
 
@@ -1557,15 +1815,64 @@ static void SLW(const u32 instr) {
 #endif
 }
 
-static void SUBF(const u32 instr) {
-    ctx.r[RD] = ctx.r[RB] - ctx.r[RA];
+static void SRW(const u32 instr) {
+    const u32 n = ctx.r[RB] & 0x3F;
+
+    if (n >= 32) {
+        ctx.r[RA] = 0;
+    } else {
+        ctx.r[RA] = common_Rotl(ctx.r[RS], 32 - n) & GetMask(n, 31);
+    }
 
     if (RC) {
-        SetFlags(0, ctx.r[RD]);
+        SetFlags(0, ctx.r[RA]);
     }
 
 #ifdef BROADWAY_DEBUG
-    printf("PPC [%08X] subf%s r%u, r%u, r%u; r%u: %08X\n", CIA, (RC) ? "." : "", RD, RA, RB, RD, ctx.r[RD]);
+    printf("PPC [%08X] srw%s r%u, r%u, r%u; r%u: %08X, cr: %08X\n", CIA, (RC) ? "." : "", RA, RS, RB, RA, ctx.r[RA], CR);
+#endif
+}
+
+static void SRAW(const u32 instr) {
+    const u32 s = 0xFFFFFFFF * (ctx.r[RS] >> 31);
+    const u32 n = ctx.r[RB] & 0x3F;
+
+    const u32 r = common_Rotl(ctx.r[RS], 32 - n);
+    u32 m = GetMask(n, 31);
+
+    if (n >= 32) {
+        m = 0;
+    }
+
+    XER.ca = (s != 0) && ((r & ~m) != 0);
+
+    ctx.r[RA] = (r & m) | (s & ~m);
+
+    if (RC) {
+        SetFlags(0, ctx.r[RA]);
+    }
+
+#ifdef BROADWAY_DEBUG
+    printf("PPC [%08X] sraw%s r%u, r%u, r%u; r%u: %08X, cr: %08X\n", CIA, (RC) ? "." : "", RA, RS, RB, RA, ctx.r[RA], CR);
+#endif
+}
+
+static void SRAWI(const u32 instr) {
+    const u32 s = 0xFFFFFFFF * (ctx.r[RS] >> 31);
+
+    const u32 r = common_Rotl(ctx.r[RS], 32 - SH);
+    const u32 m = GetMask(SH, 31);
+
+    XER.ca = (s != 0) && ((r & ~m) != 0);
+
+    ctx.r[RA] = (r & m) | (s & ~m);
+
+    if (RC) {
+        SetFlags(0, ctx.r[RA]);
+    }
+
+#ifdef BROADWAY_DEBUG
+    printf("PPC [%08X] srawi%s r%u, r%u, %u; r%u: %08X, xer: %08X\n", CIA, (RC) ? "." : "", RA, RS, SH, RA, ctx.r[RA], XER.raw);
 #endif
 }
 
@@ -1640,6 +1947,24 @@ static void STHX(const u32 instr) {
 #endif
 }
 
+static void STMW(const u32 instr) {
+    u32 addr = SIMM;
+
+    if (RA != 0) {
+        addr += ctx.r[RA];
+    }
+
+    for (int r = RS; r < NUM_GPRS; r++) {
+        Write32(addr, ctx.r[r]);
+
+        addr += sizeof(u32);
+    }
+
+#ifdef BROADWAY_DEBUG
+    printf("PPC [%08X] stmw r%u, %d(r%u); [%08X]: %08X\n", CIA, RS, SIMM, RA, addr, ctx.r[RS]);
+#endif
+}
+
 static void STW(const u32 instr) {
     u32 addr = SIMM;
 
@@ -1683,11 +2008,75 @@ static void STWX(const u32 instr) {
 #endif
 }
 
+static void SUBE(const u32 instr) {
+    const u64 n = (u64)(u32)(~ctx.r[RA]) + (u64)ctx.r[RB] + (u64)XER.ca;
+
+    XER.ca = (n >> 32) & 1;
+
+    ctx.r[RD] = (u32)n;
+
+    if (RC) {
+        SetFlags(0, ctx.r[RD]);
+    }
+
+#ifdef BROADWAY_DEBUG
+    printf("PPC [%08X] sube%s r%u, r%u, r%u; r%u: %08X, xer: %08X\n", CIA, (RC) ? "." : "", RD, RA, RB, RD, ctx.r[RD], XER.raw);
+#endif
+}
+
+static void SUBF(const u32 instr) {
+    ctx.r[RD] = ctx.r[RB] - ctx.r[RA];
+
+    if (RC) {
+        SetFlags(0, ctx.r[RD]);
+    }
+
+#ifdef BROADWAY_DEBUG
+    printf("PPC [%08X] subf%s r%u, r%u, r%u; r%u: %08X\n", CIA, (RC) ? "." : "", RD, RA, RB, RD, ctx.r[RD]);
+#endif
+}
+
+static void SUBFC(const u32 instr) {
+    const u64 n = (u64)ctx.r[RB] - (u64)ctx.r[RA];
+
+    XER.ca = (n >> 32) & 1;
+
+    ctx.r[RD] = (u32)n;
+
+    if (RC) {
+        SetFlags(0, ctx.r[RD]);
+    }
+
+#ifdef BROADWAY_DEBUG
+    printf("PPC [%08X] subfc%s r%u, r%u, r%u; r%u: %08X, xer: %08X\n", CIA, (RC) ? "." : "", RD, RA, RB, RD, ctx.r[RD], XER.raw);
+#endif
+}
+
+static void SUBFIC(const u32 instr) {
+    const u64 n = (u64)SIMM - (u64)ctx.r[RA];
+
+    XER.ca = (n >> 32) & 1;
+
+    ctx.r[RD] = (u32)n;
+
+#ifdef BROADWAY_DEBUG
+    printf("PPC [%08X] subfic r%u, r%u, %X; r%u: %08X, xer: %08X\n", CIA, RD, RA, UIMM, RD, ctx.r[RD], XER.raw);
+#endif
+}
+
 static void SYNC(const u32 instr) {
     (void)instr;
 
 #ifdef BROADWAY_DEBUG
     printf("PPC [%08X] sync\n", CIA);
+#endif
+}
+
+static void XORIS(const u32 instr) {
+    ctx.r[RA] = ctx.r[RS] ^ (UIMM << 16);
+
+#ifdef BROADWAY_DEBUG
+    printf("PPC [%08X] xoris r%u, r%u, %X; r%u: %08X\n", CIA, RA, RS, UIMM, RA, ctx.r[RA]);
 #endif
 }
 
@@ -1713,6 +2102,9 @@ static void ExecInstr(const u32 instr) {
         case PRIMARY_MULLI:
             MULLI(instr);
             break;
+        case PRIMARY_SUBFIC:
+            SUBFIC(instr);
+            break;
         case PRIMARY_CMPLI:
             CMPLI(instr);
             break;
@@ -1731,6 +2123,9 @@ static void ExecInstr(const u32 instr) {
         case PRIMARY_BC:
             BC(instr);
             break;
+        case PRIMARY_SC:
+            SC(instr);
+            break;
         case PRIMARY_B:
             B(instr);
             break;
@@ -1738,6 +2133,9 @@ static void ExecInstr(const u32 instr) {
             switch (XO) {
                 case SYSTEM_BCLR:
                     BCLR(instr);
+                    break;
+                case SYSTEM_RFI:
+                    RFI(instr);
                     break;
                 case SYSTEM_ISYNC:
                     ISYNC(instr);
@@ -1754,6 +2152,9 @@ static void ExecInstr(const u32 instr) {
                     exit(1);
             }
             break;
+        case PRIMARY_RLWIMI:
+            RLWIMI(instr);
+            break;
         case PRIMARY_RLWINM:
             RLWINM(instr);
             break;
@@ -1763,19 +2164,34 @@ static void ExecInstr(const u32 instr) {
         case PRIMARY_ORIS:
             ORIS(instr);
             break;
+        case PRIMARY_XORIS:
+            XORIS(instr);
+            break;
+        case PRIMARY_ANDIrc:
+            ANDIrc(instr);
+            break;
         case PRIMARY_REGISTER:
             switch (XO) {
                 case SECONDARY_CMP:
                     CMP(instr);
                     break;
+                case SECONDARY_SUBFC:
+                    SUBFC(instr);
+                    break;
                 case SECONDARY_ADDC:
                     ADDC(instr);
+                    break;
+                case SECONDARY_MULHWU:
+                    MULHWU(instr);
                     break;
                 case SECONDARY_LWZX:
                     LWZX(instr);
                     break;
                 case SECONDARY_SLW:
                     SLW(instr);
+                    break;
+                case SECONDARY_CNTLZW:
+                    CNTLZW(instr);
                     break;
                 case SECONDARY_AND:
                     AND(instr);
@@ -1786,14 +2202,23 @@ static void ExecInstr(const u32 instr) {
                 case SECONDARY_SUBF:
                     SUBF(instr);
                     break;
+                case SECONDARY_ANDC:
+                    ANDC(instr);
+                    break;
                 case SECONDARY_MFMSR:
                     MFMSR(instr);
                     break;
                 case SECONDARY_DCBF:
                     DCBF(instr);
                     break;
+                case SECONDARY_NEG:
+                    NEG(instr);
+                    break;
                 case SECONDARY_NOR:
                     NOR(instr);
+                    break;
+                case SECONDARY_SUBE:
+                    SUBE(instr);
                     break;
                 case SECONDARY_ADDE:
                     ADDE(instr);
@@ -1804,6 +2229,9 @@ static void ExecInstr(const u32 instr) {
                 case SECONDARY_STWX:
                     STWX(instr);
                     break;
+                case SECONDARY_ADDZE:
+                    ADDZE(instr);
+                    break;
                 case SECONDARY_MTSR:
                     MTSR(instr);
                     break;
@@ -1812,6 +2240,9 @@ static void ExecInstr(const u32 instr) {
                     break;
                 case SECONDARY_ADD:
                     ADD(instr);
+                    break;
+                case SECONDARY_LHZX:
+                    LHZX(instr);
                     break;
                 case SECONDARY_MFSPR:
                     MFSPR(instr);
@@ -1825,14 +2256,29 @@ static void ExecInstr(const u32 instr) {
                 case SECONDARY_OR:
                     OR(instr);
                     break;
+                case SECONDARY_DIVWU:
+                    DIVWU(instr);
+                    break;
                 case SECONDARY_MTSPR:
                     MTSPR(instr);
+                    break;
+                case SECONDARY_DCBI:
+                    DCBI(instr);
                     break;
                 case SECONDARY_DIVW:
                     DIVW(instr);
                     break;
+                case SECONDARY_SRW:
+                    SRW(instr);
+                    break;
                 case SECONDARY_SYNC:
                     SYNC(instr);
+                    break;
+                case SECONDARY_SRAW:
+                    SRAW(instr);
+                    break;
+                case SECONDARY_SRAWI:
+                    SRAWI(instr);
                     break;
                 case SECONDARY_EXTSB:
                     EXTSB(instr);
@@ -1870,8 +2316,17 @@ static void ExecInstr(const u32 instr) {
         case PRIMARY_STBU:
             STBU(instr);
             break;
+        case PRIMARY_LHZ:
+            LHZ(instr);
+            break;
         case PRIMARY_STH:
             STH(instr);
+            break;
+        case PRIMARY_LMW:
+            LMW(instr);
+            break;
+        case PRIMARY_STMW:
+            STMW(instr);
             break;
         case PRIMARY_LFS:
             LFS(instr);
