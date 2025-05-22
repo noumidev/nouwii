@@ -21,6 +21,7 @@
 #include "hw/hollywood.h"
 #include "hw/mi.h"
 #include "hw/pi.h"
+#include "hw/si.h"
 #include "hw/vi.h"
 
 #define SIZE_ADDRESS_SPACE (0x100000000)
@@ -35,6 +36,7 @@ enum {
     BASE_DSP  = 0x0C005000,
     BASE_HW   = 0x0D000000,
     BASE_DI   = 0x0D006000,
+    BASE_SI   = 0x0D006400,
     BASE_EXI  = 0x0D006800,
     BASE_AI   = 0x0D006C00,
     BASE_MEM2 = 0x10000000,
@@ -48,6 +50,7 @@ enum {
     SIZE_DSP  = 0x0000200,
     SIZE_HW   = 0x0000400,
     SIZE_DI   = 0x0000040,
+    SIZE_SI   = 0x0000100,
     SIZE_EXI  = 0x0000080,
     SIZE_AI   = 0x0000020,
     SIZE_MEM2 = 0x4000000,
@@ -91,6 +94,10 @@ u##size ReadIo##size(const u32 addr) {                       \
                                                              \
     if ((addr & ~(SIZE_DI - 1)) == BASE_DI) {                \
         return di_ReadIo##size(addr);                        \
+    }                                                        \
+                                                             \
+    if ((addr & ~(SIZE_SI - 1)) == BASE_SI) {                \
+        return si_ReadIo##size(addr);                        \
     }                                                        \
                                                              \
     if ((addr & ~(SIZE_EXI - 1)) == BASE_EXI) {              \
@@ -148,6 +155,11 @@ void WriteIo##size(const u32 addr, const u##size data) {                        
                                                                                 \
     if ((addr & ~(SIZE_DI - 1)) == BASE_DI) {                                   \
         di_WriteIo##size(addr, data);                                           \
+        return;                                                                 \
+    }                                                                           \
+                                                                                \
+    if ((addr & ~(SIZE_SI - 1)) == BASE_SI) {                                   \
+        si_WriteIo##size(addr, data);                                           \
         return;                                                                 \
     }                                                                           \
                                                                                 \
