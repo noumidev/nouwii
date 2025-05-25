@@ -22,6 +22,7 @@ set(SOURCES
     src/common/bswap.c
     src/common/buffer.c
     src/common/file.c
+    src/core/hle.c
     src/core/memory.c
     src/hw/ai.c
     src/hw/broadway.c
@@ -29,6 +30,7 @@ set(SOURCES
     src/hw/dsp.c
     src/hw/exi.c
     src/hw/hollywood.c
+    src/hw/ipc.c
     src/hw/mi.c
     src/hw/pi.c
     src/hw/si.c
@@ -44,6 +46,7 @@ set(HEADERS
     include/common/config.h
     include/common/file.h
     include/common/types.h
+    include/core/hle.h
     include/core/memory.h
     include/hw/ai.h
     include/hw/broadway.h
@@ -51,6 +54,7 @@ set(HEADERS
     include/hw/dsp.h
     include/hw/exi.h
     include/hw/hollywood.h
+    include/hw/ipc.h
     include/hw/mi.h
     include/hw/pi.h
     include/hw/si.h

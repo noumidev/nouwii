@@ -9,6 +9,7 @@
 
 #include "common/config.h"
 
+#include "core/hle.h"
 #include "core/memory.h"
 
 #include "hw/ai.h"
@@ -17,6 +18,7 @@
 #include "hw/dsp.h"
 #include "hw/exi.h"
 #include "hw/hollywood.h"
+#include "hw/ipc.h"
 #include "hw/mi.h"
 #include "hw/pi.h"
 #include "hw/si.h"
@@ -28,6 +30,7 @@
 
 void nouwii_Initialize(const common_Config* config) {
     memory_Initialize(config->pathMem1, config->pathMem2);
+    hle_Initialize();
 
     ai_Initialize();
     broadway_Initialize();
@@ -35,6 +38,7 @@ void nouwii_Initialize(const common_Config* config) {
     dsp_Initialize();
     exi_Initialize();
     hollywood_Initialize();
+    ipc_Initialize();
     mi_Initialize();
     pi_Initialize();
     si_Initialize();
@@ -43,6 +47,7 @@ void nouwii_Initialize(const common_Config* config) {
 
 void nouwii_Reset() {
     memory_Reset();
+    hle_Reset();
 
     ai_Reset();
     broadway_Reset();
@@ -50,6 +55,7 @@ void nouwii_Reset() {
     dsp_Reset();
     exi_Reset();
     hollywood_Reset();
+    ipc_Reset();
     mi_Reset();
     pi_Reset();
     si_Reset();
@@ -58,6 +64,7 @@ void nouwii_Reset() {
 
 void nouwii_Shutdown() {
     memory_Shutdown();
+    hle_Shutdown();
 
     ai_Shutdown();
     broadway_Shutdown();
@@ -65,6 +72,7 @@ void nouwii_Shutdown() {
     dsp_Shutdown();
     exi_Shutdown();
     hollywood_Shutdown();
+    ipc_Shutdown();
     mi_Shutdown();
     pi_Shutdown();
     si_Shutdown();
@@ -76,6 +84,8 @@ void nouwii_Run() {
         *broadway_GetCyclesToRun() = MAX_CYCLES_TO_RUN;
 
         broadway_Run();
+
+        hle_Tick(MAX_CYCLES_TO_RUN);
     }
 }
 
