@@ -85,6 +85,14 @@ MAKEFUNC_PI_READIO(64)
 
 u32 pi_ReadIo32(const u32 addr) {
     switch (addr) {
+        case PI_INTFLAG:
+            printf("PI_INTFLAG read32\n");
+
+            return INTFLAG;
+        case PI_INTMASK:
+            printf("PI_INTMASK read32\n");
+
+            return INTMASK;
         case PI_RESET:
             printf("PI_RESET read32\n");
 
