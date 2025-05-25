@@ -115,10 +115,19 @@ void hollywood_WriteIo32(const u32 addr, const u32 data) {
 
             ipc_WritePpcControl(data);
             break;
+        case HW_PPCIRQFLAG:
+            printf("HW_PPCIRQFLAG write32 (data: %08X)\n", data);
+
+            PPCIRQFLAG &= ~data;
+
+            CheckPiInterrupt();
+            break;
         case HW_PPCIRQMASK:
             printf("HW_PPCIRQMASK write32 (data: %08X)\n", data);
 
             PPCIRQMASK = data;
+
+            CheckPiInterrupt();
             break;
         default:
             printf("Hollywood Unimplemented write32 (address: %08X, data: %08X)\n", addr, data);
