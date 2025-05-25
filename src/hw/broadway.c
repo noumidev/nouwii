@@ -101,6 +101,7 @@ enum {
     SECONDARY_NOR    =  124,
     SECONDARY_SUBE   =  136,
     SECONDARY_ADDE   =  138,
+    SECONDARY_MTCR   =  144,
     SECONDARY_MTMSR  =  146,
     SECONDARY_STWX   =  151,
     SECONDARY_ADDZE  =  202,
@@ -121,6 +122,7 @@ enum {
     SECONDARY_SYNC   =  598,
     SECONDARY_SRAW   =  792,
     SECONDARY_SRAWI  =  824,
+    SECONDARY_EXTSH  =  922,
     SECONDARY_EXTSB  =  954,
     SECONDARY_ICBI   =  982,
     SECONDARY_DCBZ   = 1014,
@@ -151,6 +153,8 @@ enum {
     SPR_LR     =    8,
     SPR_CTR    =    9,
     SPR_DEC    =   22,
+    SPR_SRR0   =   26,
+    SPR_SRR1   =   27,
     SPR_TBL    =  268,
     SPR_TBU    =  269,
     SPR_SPRG0  =  272,
@@ -524,6 +528,8 @@ typedef struct SpecialRegs {
     u32 srr0;
     Msr srr1;
 
+    u32 sprg[NUM_SPRGS];
+
     u32 lr;
     u32 ctr;
 } SpecialRegs;
@@ -664,6 +670,14 @@ MAKEFUNC_BROADWAY_WRITE(32)
 MAKEFUNC_BROADWAY_WRITE(64)
 
 static u32 GetSpr(const u32 spr) {
+    if ((spr >= SPR_SPRG0) && (spr <= SPR_SPRG3)) {
+        const u32 idx = spr - SPR_SPRG0;
+
+        printf("SPRG%u read\n", idx);
+
+        return SPRG[idx];
+    }
+
     if ((spr >= SPR_GQR0) && (spr <= SPR_GQR7)) {
         const u32 idx = spr - SPR_GQR0;
 
@@ -689,6 +703,14 @@ static u32 GetSpr(const u32 spr) {
             printf("DEC read\n");
 
             return DEC.raw;
+        case SPR_SRR0:
+            printf("SRR0 read\n");
+
+            return SRR0;
+        case SPR_SRR1:
+            printf("SRR1 read\n");
+
+            return SRR1.raw;
         case SPR_TBL:
             printf("TBL read\n");
 
@@ -746,6 +768,16 @@ static u32 GetSpr(const u32 spr) {
 }
 
 static void SetSpr(const u32 spr, const u32 data) {
+    if ((spr >= SPR_SPRG0) && (spr <= SPR_SPRG3)) {
+        const u32 idx = spr - SPR_SPRG0;
+
+        printf("SPRG%u write (data: %08X)\n", idx, data);
+
+        SPRG[idx] = data;
+
+        return;
+    }
+
     if (((spr >= SPR_IBAT0U) && (spr <= SPR_IBAT3L)) ||
         ((spr >= SPR_IBAT4U) && (spr <= SPR_IBAT7L))) {
         u32 idx = (spr - SPR_IBAT0U) / 2;
@@ -818,6 +850,16 @@ static void SetSpr(const u32 spr, const u32 data) {
             printf("DEC write (data: %08X)\n", data);
 
             DEC.raw = data;
+            break;
+        case SPR_SRR0:
+            printf("SRR0 write (data: %08X)\n", data);
+
+            SRR0 = data;
+            break;
+        case SPR_SRR1:
+            printf("SRR1 write (data: %08X)\n", data);
+
+            SRR1.raw = data;
             break;
         case SPR_HID2:
             printf("HID2 write (data: %08X)\n", data);
@@ -1345,6 +1387,18 @@ static void EXTSB(const u32 instr) {
 #endif
 }
 
+static void EXTSH(const u32 instr) {
+    ctx.r[RA] = (i16)ctx.r[RS];
+
+    if (RC) {
+        SetFlags(0, ctx.r[RA]);
+    }
+
+#ifdef BROADWAY_DEBUG
+    printf("PPC [%08X] extsh%s r%u, r%u; r%u: %08X\n", CIA, (RC) ? "." : "", RA, RS, RA, ctx.r[RA]);
+#endif
+}
+
 static void FMR(const u32 instr) {
     // TODO: Implement flags
     assert(!RC);
@@ -1576,6 +1630,14 @@ static void MFTB(const u32 instr) {
 
 #ifdef BROADWAY_DEBUG
     printf("PPC [%08X] mftb r%u, spr%u; r%u: %08X\n", CIA, RD, SPR, RD, ctx.r[RD]);
+#endif
+}
+
+static void MTCR(const u32 instr) {
+    CR = ctx.r[RS];
+
+#ifdef BROADWAY_DEBUG
+    printf("PPC [%08X] mtcr r%u; cr: %08X\n", CIA, RS, ctx.r[RS]);
 #endif
 }
 
@@ -2332,6 +2394,9 @@ static void ExecInstr(const u32 instr) {
                 case SECONDARY_ADDE:
                     ADDE(instr);
                     break;
+                case SECONDARY_MTCR:
+                    MTCR(instr);
+                    break;
                 case SECONDARY_MTMSR:
                     MTMSR(instr);
                     break;
@@ -2391,6 +2456,9 @@ static void ExecInstr(const u32 instr) {
                     break;
                 case SECONDARY_SRAWI:
                     SRAWI(instr);
+                    break;
+                case SECONDARY_EXTSH:
+                    EXTSH(instr);
                     break;
                 case SECONDARY_EXTSB:
                     EXTSB(instr);
