@@ -10,6 +10,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "hw/broadway.h"
+
 #define CONSOLE_TYPE (2 << 28)
 
 #define MAKEFUNC_PI_READIO(size)                                     \
@@ -25,11 +27,17 @@ void pi_WriteIo##size(const u32 addr, const u##size data) {                     
 }                                                                                       \
 
 enum {
+    PI_INTFLAG      = 0xC003000,
     PI_INTMASK      = 0xC003004,
+    PI_RESET        = 0xC003024,
     PI_CONSOLE_TYPE = 0xC00302C,
 };
 
+#define INTFLAG (ctx.intflag)
+#define INTMASK (ctx.intmask)
+
 typedef struct Context {
+    u32 intflag;
     u32 intmask;
 } Context;
 
@@ -47,12 +55,40 @@ void pi_Shutdown() {
 
 }
 
+void pi_AssertIrq(const u32 irqn) {
+    if ((INTFLAG & (1 << irqn)) == 0) {
+        printf("PI Interrupt %u asserted\n", irqn);
+    }
+
+    INTFLAG |= 1 << irqn;
+
+    if (pi_IsIrqAsserted()) {
+        broadway_TryInterrupt();
+    }
+}
+
+void pi_ClearIrq(const u32 irqn) {
+    if ((INTFLAG & (1 << irqn)) != 0) {
+        printf("PI Interrupt %u cleared\n", irqn);
+    }
+
+    INTFLAG &= ~(1 << irqn);
+}
+
+int pi_IsIrqAsserted() {
+    return (INTFLAG & INTMASK) != 0;
+}
+
 MAKEFUNC_PI_READIO(8)
 MAKEFUNC_PI_READIO(16)
 MAKEFUNC_PI_READIO(64)
 
 u32 pi_ReadIo32(const u32 addr) {
     switch (addr) {
+        case PI_RESET:
+            printf("PI_RESET read32\n");
+
+            return 0;
         case PI_CONSOLE_TYPE:
             printf("PI_CONSOLE_TYPE read32\n");
 
@@ -73,7 +109,11 @@ void pi_WriteIo32(const u32 addr, const u32 data) {
         case PI_INTMASK:
             printf("PI_INTMASK write32 (data: %08X)\n", data);
 
-            ctx.intmask = data;
+            INTMASK = data;
+
+            if (pi_IsIrqAsserted()) {
+                broadway_TryInterrupt();
+            }
             break;
         default:
             printf("PI Unimplemented write32 (address: %08X, data: %08X)\n", addr, data);

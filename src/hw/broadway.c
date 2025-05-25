@@ -16,20 +16,30 @@
 
 #include "core/memory.h"
 
+#include "hw/pi.h"
+
 // #define BROADWAY_DEBUG
 
-#define NUM_GPRS (32)
-#define NUM_FPRS (32)
-#define NUM_BATS (8)
-#define NUM_GQRS (8)
-#define NUM_PMCS (4)
-#define NUM_CRS  (8)
-#define NUM_PS   (2)
+#define NUM_GPRS  (32)
+#define NUM_FPRS  (32)
+#define NUM_BATS  (8)
+#define NUM_GQRS  (8)
+#define NUM_CRS   (8)
+#define NUM_PMCS  (4)
+#define NUM_SPRGS (4)
+#define NUM_PS    (2)
+
+#define SIZE_CACHE_BLOCK (0x20)
 
 #define INITIAL_PC (0x3400)
 
 #define MASK_MSR  (0x87C0FF73)
 #define MASK_SRR1 (0x783F0000)
+
+enum {
+    VECTOR_EXTERNAL_INTERRUPT = 0x500,
+    VECTOR_SYSTEM_CALL        = 0xC00,
+};
 
 enum {
     PRIMARY_PAIREDSINGLE =  4,
@@ -72,44 +82,48 @@ enum {
 };
 
 enum {
-    SECONDARY_CMP    =   0,
-    SECONDARY_SUBFC  =   8,
-    SECONDARY_ADDC   =  10,
-    SECONDARY_MULHWU =  11,
-    SECONDARY_LWZX   =  23,
-    SECONDARY_SLW    =  24,
-    SECONDARY_CNTLZW =  26,
-    SECONDARY_AND    =  28,
-    SECONDARY_CMPL   =  32,
-    SECONDARY_SUBF   =  40,
-    SECONDARY_ANDC   =  60,
-    SECONDARY_MFMSR  =  83,
-    SECONDARY_DCBF   =  86,
-    SECONDARY_NEG    = 104,
-    SECONDARY_NOR    = 124,
-    SECONDARY_SUBE   = 136,
-    SECONDARY_ADDE   = 138,
-    SECONDARY_MTMSR  = 146,
-    SECONDARY_STWX   = 151,
-    SECONDARY_ADDZE  = 202,
-    SECONDARY_MTSR   = 210,
-    SECONDARY_MULLW  = 235,
-    SECONDARY_ADD    = 266,
-    SECONDARY_LHZX   = 279,
-    SECONDARY_MFSPR  = 339,
-    SECONDARY_MFTB   = 371,
-    SECONDARY_STHX   = 407,
-    SECONDARY_OR     = 444,
-    SECONDARY_DIVWU  = 459,
-    SECONDARY_MTSPR  = 467,
-    SECONDARY_DCBI   = 470,
-    SECONDARY_DIVW   = 491,
-    SECONDARY_SRW    = 536,
-    SECONDARY_SYNC   = 598,
-    SECONDARY_SRAW   = 792,
-    SECONDARY_SRAWI  = 824,
-    SECONDARY_EXTSB  = 954,
-    SECONDARY_ICBI   = 982,
+    SECONDARY_CMP    =    0,
+    SECONDARY_SUBFC  =    8,
+    SECONDARY_ADDC   =   10,
+    SECONDARY_MULHWU =   11,
+    SECONDARY_MFCR   =   19,
+    SECONDARY_LWZX   =   23,
+    SECONDARY_SLW    =   24,
+    SECONDARY_CNTLZW =   26,
+    SECONDARY_AND    =   28,
+    SECONDARY_CMPL   =   32,
+    SECONDARY_SUBF   =   40,
+    SECONDARY_LWZUX  =   55,
+    SECONDARY_ANDC   =   60,
+    SECONDARY_MFMSR  =   83,
+    SECONDARY_DCBF   =   86,
+    SECONDARY_NEG    =  104,
+    SECONDARY_NOR    =  124,
+    SECONDARY_SUBE   =  136,
+    SECONDARY_ADDE   =  138,
+    SECONDARY_MTMSR  =  146,
+    SECONDARY_STWX   =  151,
+    SECONDARY_ADDZE  =  202,
+    SECONDARY_MTSR   =  210,
+    SECONDARY_MULLW  =  235,
+    SECONDARY_ADD    =  266,
+    SECONDARY_LHZX   =  279,
+    SECONDARY_MFSPR  =  339,
+    SECONDARY_MFTB   =  371,
+    SECONDARY_STHX   =  407,
+    SECONDARY_ORC    =  412,
+    SECONDARY_OR     =  444,
+    SECONDARY_DIVWU  =  459,
+    SECONDARY_MTSPR  =  467,
+    SECONDARY_DCBI   =  470,
+    SECONDARY_DIVW   =  491,
+    SECONDARY_SRW    =  536,
+    SECONDARY_SYNC   =  598,
+    SECONDARY_SRAW   =  792,
+    SECONDARY_SRAWI  =  824,
+    SECONDARY_EXTSB  =  954,
+    SECONDARY_ICBI   =  982,
+    SECONDARY_DCBZ   = 1014,
 };
 
 enum {
@@ -139,6 +153,8 @@ enum {
     SPR_DEC    =   22,
     SPR_TBL    =  268,
     SPR_TBU    =  269,
+    SPR_SPRG0  =  272,
+    SPR_SPRG3  =  275,
     SPR_IBAT0U =  528,
     SPR_IBAT3L =  535,
     SPR_DBAT0U =  536,
@@ -262,6 +278,7 @@ static u32 SetBits(const u32 n, const u32 start, const u32 end, const u32 data) 
 #define IBATU (ctx.sprs.ibatu)
 #define   GQR (ctx.sprs.gqr)
 #define  L2CR (ctx.sprs.l2cr)
+#define  SPRG (ctx.sprs.sprg)
 #define  SRR0 (ctx.sprs.srr0)
 #define  SRR1 (ctx.sprs.srr1)
 
@@ -531,6 +548,48 @@ typedef struct Context {
 
 static Context ctx;
 
+static void SaveExceptionContext() {
+    // Save IA and MSR
+    SRR0 = CIA + sizeof(u32);
+    SRR1.raw &= ~(MASK_SRR1 | MASK_MSR);
+    SRR1.raw |= MSR.raw & MASK_MSR;
+
+    MSR.le  = MSR.ile;
+    MSR.ri  = 0;
+    MSR.dr  = 0;
+    MSR.ir  = 0;
+    MSR.fe1 = 0;
+    MSR.be  = 0;
+    MSR.se  = 0;
+    MSR.fe0 = 0;
+    MSR.fp  = 0;
+    MSR.pr  = 0;
+    MSR.ee  = 0;
+    MSR.pow = 0;
+}
+
+static void ExternalInterrupt() {
+    printf("Broadway External interrupt exception (CIA: %08X)\n", CIA);
+
+    SaveExceptionContext();
+
+    IA = VECTOR_EXTERNAL_INTERRUPT;
+}
+
+static void SystemCall() {
+    printf("Broadway System call exception (CIA: %08X)\n", CIA);
+
+    SaveExceptionContext();
+
+    IA = VECTOR_SYSTEM_CALL;
+}
+
+static void CheckInterrupt() {
+    if (pi_IsIrqAsserted() && (MSR.ee != 0)) {
+        ExternalInterrupt();
+    }
+}
+
 static void SetCr(const int cr, const u32 n) {
     const int index = 4 * cr;
 
@@ -605,6 +664,14 @@ MAKEFUNC_BROADWAY_WRITE(32)
 MAKEFUNC_BROADWAY_WRITE(64)
 
 static u32 GetSpr(const u32 spr) {
+    if ((spr >= SPR_GQR0) && (spr <= SPR_GQR7)) {
+        const u32 idx = spr - SPR_GQR0;
+
+        printf("GQR%u read\n", idx);
+
+        return GQR[idx].raw;
+    }
+
     switch (spr) {
         case SPR_XER:
             printf("XER read\n");
@@ -1214,6 +1281,23 @@ static void DCBI(const u32 instr) {
 #endif
 }
 
+static void DCBZ(const u32 instr) {
+    u32 addr = ctx.r[RB];
+
+    if (RA != 0) {
+        addr += ctx.r[RA];
+    }
+
+    // HACK
+    for (u32 i = 0; i < SIZE_CACHE_BLOCK; i += sizeof(u64)) {
+        Write64(addr + i, 0);
+    }
+
+#ifdef BROADWAY_DEBUG
+    printf("PPC [%08X] dcbz r%u, r%u; clear block @ [%08X]\n", CIA, RA, RB, addr);
+#endif
+}
+
 static void DIVW(const u32 instr) {
     const i32 n = (i32)ctx.r[RA];
     const i32 d = (i32)ctx.r[RB];
@@ -1436,6 +1520,19 @@ static void LWZU(const u32 instr) {
 #endif
 }
 
+static void LWZUX(const u32 instr) {
+    assert(RA != 0);
+    assert(RA != RD);
+
+    const u32 addr = ctx.r[RA] + ctx.r[RB];
+
+    ctx.r[RD] = Read32(addr, NOUWII_FALSE);
+
+#ifdef BROADWAY_DEBUG
+    printf("PPC [%08X] lwzux r%u, r%u, r%u; r%u: %08X [%08X]\n", CIA, RD, RA, RB, RD, ctx.r[RD], addr);
+#endif
+}
+
 static void LWZX(const u32 instr) {
     u32 addr = ctx.r[RB];
 
@@ -1447,6 +1544,14 @@ static void LWZX(const u32 instr) {
 
 #ifdef BROADWAY_DEBUG
     printf("PPC [%08X] lwzx r%u, r%u, r%u; r%u: %08X [%08X]\n", CIA, RD, RA, RB, RD, ctx.r[RD], addr);
+#endif
+}
+
+static void MFCR(const u32 instr) {
+    ctx.r[RD] = CR;
+
+#ifdef BROADWAY_DEBUG
+    printf("PPC [%08X] mfcr r%u; r%u: %08X\n", CIA, RD, RD, ctx.r[RD]);
 #endif
 }
 
@@ -1503,6 +1608,8 @@ static void MTFSF(const u32 instr) {
 static void MTMSR(const u32 instr) {
     MSR.raw = ctx.r[RS];
 
+    CheckInterrupt();
+
 #ifdef BROADWAY_DEBUG
     printf("PPC [%08X] mtmsr r%u; msr: %08X\n", CIA, RS, ctx.r[RS]);
 #endif
@@ -1517,6 +1624,8 @@ static void MTSPR(const u32 instr) {
 }
 
 static void MTSR(const u32 instr) {
+    (void)instr;
+
     // TODO: Implement SRs
 #ifdef BROADWAY_DEBUG
     printf("PPC [%08X] mtsr sr%u, r%u; sr%u: %08X\n", CIA, RA, RS, RA, ctx.r[RS]);
@@ -1588,6 +1697,18 @@ static void OR(const u32 instr) {
 
 #ifdef BROADWAY_DEBUG
     printf("PPC [%08X] or%s r%u, r%u, r%u; r%u: %08X\n", CIA, (RC) ? "." : "", RA, RS, RB, RA, ctx.r[RA]);
+#endif
+}
+
+static void ORC(const u32 instr) {
+    ctx.r[RA] = ctx.r[RS] | ~ctx.r[RB];
+
+    if (RC) {
+        SetFlags(0, ctx.r[RA]);
+    }
+
+#ifdef BROADWAY_DEBUG
+    printf("PPC [%08X] orc%s r%u, r%u, r%u; r%u: %08X\n", CIA, (RC) ? "." : "", RA, RS, RB, RA, ctx.r[RA]);
 #endif
 }
 
@@ -1762,6 +1883,8 @@ static void RFI(const u32 instr) {
 
     IA = SRR0;
 
+    CheckInterrupt();
+
 #ifdef BROADWAY_DEBUG
     printf("PPC [%08X] rfi; nia: %08X, msr: %08X\n", CIA, IA, MSR.raw);
 #endif
@@ -1770,27 +1893,7 @@ static void RFI(const u32 instr) {
 static void SC(const u32 instr) {
     assert(GetBits(instr, 30, 30) != 0);
 
-    printf("Broadway System call exception (CIA: %08X)\n", CIA);
-
-    // Save IA and MSR
-    SRR0 = CIA + sizeof(u32);
-    SRR1.raw &= ~(MASK_SRR1 | MASK_MSR);
-    SRR1.raw |= MSR.raw & MASK_MSR;
-
-    MSR.le  = MSR.ile;
-    MSR.ri  = 0;
-    MSR.dr  = 0;
-    MSR.ir  = 0;
-    MSR.fe1 = 0;
-    MSR.be  = 0;
-    MSR.se  = 0;
-    MSR.fe0 = 0;
-    MSR.fp  = 0;
-    MSR.pr  = 0;
-    MSR.ee  = 0;
-    MSR.pow = 0;
-
-    IA = 0xC00;
+    SystemCall();
 
 #ifdef BROADWAY_DEBUG
     printf("PPC [%08X] sc; srr0: %08X, srr1: %08X\n", CIA, SRR0, SRR1.raw);
@@ -2184,6 +2287,9 @@ static void ExecInstr(const u32 instr) {
                 case SECONDARY_MULHWU:
                     MULHWU(instr);
                     break;
+                case SECONDARY_MFCR:
+                    MFCR(instr);
+                    break;
                 case SECONDARY_LWZX:
                     LWZX(instr);
                     break;
@@ -2201,6 +2307,9 @@ static void ExecInstr(const u32 instr) {
                     break;
                 case SECONDARY_SUBF:
                     SUBF(instr);
+                    break;
+                case SECONDARY_LWZUX:
+                    LWZUX(instr);
                     break;
                 case SECONDARY_ANDC:
                     ANDC(instr);
@@ -2253,6 +2362,9 @@ static void ExecInstr(const u32 instr) {
                 case SECONDARY_STHX:
                     STHX(instr);
                     break;
+                case SECONDARY_ORC:
+                    ORC(instr);
+                    break;
                 case SECONDARY_OR:
                     OR(instr);
                     break;
@@ -2285,6 +2397,9 @@ static void ExecInstr(const u32 instr) {
                     break;
                 case SECONDARY_ICBI:
                     ICBI(instr);
+                    break;
+                case SECONDARY_DCBZ:
+                    DCBZ(instr);
                     break;
                 default:
                     printf("Unimplemented Broadway secondary opcode %u (IA: %08X, instruction: %08X)\n", XO, CIA, instr);
@@ -2404,6 +2519,12 @@ void broadway_Run() {
         ExecInstr(instr);
 
         IncrementTbr();
+    }
+}
+
+void broadway_TryInterrupt() {
+    if (MSR.ee != 0) {
+        ExternalInterrupt();
     }
 }
 

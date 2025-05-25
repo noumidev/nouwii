@@ -13,4 +13,6 @@ void broadway_Shutdown();
 
 void broadway_Run();
 
+void broadway_TryInterrupt();
+
 i64* broadway_GetCyclesToRun();
