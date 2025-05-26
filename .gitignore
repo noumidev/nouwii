@@ -51,8 +51,12 @@ Module.symvers
 Mkfile.old
 dkms.conf
 
+# macOS
+.DS_Store
+
 # Dev
 .cache
 .vscode
 build
+filesystem
 out
