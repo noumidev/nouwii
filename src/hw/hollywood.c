@@ -28,6 +28,7 @@ void hollywood_WriteIo##size(const u32 addr, const u##size data) {              
 enum {
     HW_IPCPPCMSG  = 0xD000000,
     HW_IPCPPCCTRL = 0xD000004,
+    HW_IPCARMMSG  = 0xD000008,
     HW_PPCIRQFLAG = 0xD000030,
     HW_PPCIRQMASK = 0xD000034,
 };
@@ -92,10 +93,14 @@ u32 hollywood_ReadIo32(const u32 addr) {
             printf("HW_IPCPPCMSG read32\n");
 
             return ipc_ReadPpcControl();
+        case HW_IPCARMMSG:
+            printf("HW_IPCARMMSG read32\n");
+
+            return ipc_ReadArmMessage();
         default:
             printf("Hollywood Unimplemented read32 (address: %08X)\n", addr);
 
-            exit(1);
+            return 0;
     }
 }
 
@@ -131,7 +136,6 @@ void hollywood_WriteIo32(const u32 addr, const u32 data) {
             break;
         default:
             printf("Hollywood Unimplemented write32 (address: %08X, data: %08X)\n", addr, data);
-
-            exit(1); 
+            break;
     }
 }
