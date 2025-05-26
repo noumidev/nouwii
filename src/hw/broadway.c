@@ -104,8 +104,10 @@ enum {
     SECONDARY_MTCR   =  144,
     SECONDARY_MTMSR  =  146,
     SECONDARY_STWX   =  151,
+    SECONDARY_STWUX  =  183,
     SECONDARY_ADDZE  =  202,
     SECONDARY_MTSR   =  210,
+    SECONDARY_STBX   =  215,
     SECONDARY_MULLW  =  235,
     SECONDARY_ADD    =  266,
     SECONDARY_LHZX   =  279,
@@ -1581,6 +1583,7 @@ static void LWZUX(const u32 instr) {
     const u32 addr = ctx.r[RA] + ctx.r[RB];
 
     ctx.r[RD] = Read32(addr, NOUWII_FALSE);
+    ctx.r[RA] = addr;
 
 #ifdef BROADWAY_DEBUG
     printf("PPC [%08X] lwzux r%u, r%u, r%u; r%u: %08X [%08X]\n", CIA, RD, RA, RB, RD, ctx.r[RD], addr);
@@ -2070,6 +2073,20 @@ static void STBU(const u32 instr) {
 #endif
 }
 
+static void STBX(const u32 instr) {
+    u32 addr = ctx.r[RB];
+
+    if (RA != 0) {
+        addr += ctx.r[RA];
+    }
+
+    Write8(addr, (u8)ctx.r[RS]);
+
+#ifdef BROADWAY_DEBUG
+    printf("PPC [%08X] stbx r%u, r%u, r%u; [%08X]: %02X\n", CIA, RS, RA, RB, addr, (u8)ctx.r[RS]);
+#endif
+}
+
 static void STFS(const u32 instr) {
     u32 addr = SIMM;
 
@@ -2156,6 +2173,20 @@ static void STWU(const u32 instr) {
 
 #ifdef BROADWAY_DEBUG
     printf("PPC [%08X] stwu r%u, %d(r%u); [%08X]: %08X\n", CIA, RS, SIMM, RA, addr, data);
+#endif
+}
+
+static void STWUX(const u32 instr) {
+    assert(RA != 0);
+
+    const u32 addr = ctx.r[RA] + ctx.r[RB];
+
+    Write32(addr, ctx.r[RS]);
+
+    ctx.r[RA] = addr;
+
+#ifdef BROADWAY_DEBUG
+    printf("PPC [%08X] stwux r%u, r%u, r%u; [%08X]: %08X\n", CIA, RS, RA, RB, addr, ctx.r[RS]);
 #endif
 }
 
@@ -2403,11 +2434,17 @@ static void ExecInstr(const u32 instr) {
                 case SECONDARY_STWX:
                     STWX(instr);
                     break;
+                case SECONDARY_STWUX:
+                    STWUX(instr);
+                    break;
                 case SECONDARY_ADDZE:
                     ADDZE(instr);
                     break;
                 case SECONDARY_MTSR:
                     MTSR(instr);
+                    break;
+                case SECONDARY_STBX:
+                    STBX(instr);
                     break;
                 case SECONDARY_MULLW:
                     MULLW(instr);
