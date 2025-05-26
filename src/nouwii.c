@@ -9,6 +9,9 @@
 
 #include "common/config.h"
 
+#include "core/dev_di.h"
+#include "core/es.h"
+#include "core/fs.h"
 #include "core/hle.h"
 #include "core/memory.h"
 
@@ -26,11 +29,15 @@
 
 #define NUM_ARGS (1 + 2)
 
-#define MAX_CYCLES_TO_RUN (1024)
+#define MAX_CYCLES_TO_RUN (64)
 
 void nouwii_Initialize(const common_Config* config) {
     memory_Initialize(config->pathMem1, config->pathMem2);
     hle_Initialize();
+
+    dev_di_Initialize();
+    es_Initialize();
+    fs_Initialize();
 
     ai_Initialize();
     broadway_Initialize();
@@ -49,6 +56,10 @@ void nouwii_Reset() {
     memory_Reset();
     hle_Reset();
 
+    dev_di_Reset();
+    es_Reset();
+    fs_Reset();
+
     ai_Reset();
     broadway_Reset();
     di_Reset();
@@ -65,6 +76,10 @@ void nouwii_Reset() {
 void nouwii_Shutdown() {
     memory_Shutdown();
     hle_Shutdown();
+
+    dev_di_Shutdown();
+    es_Shutdown();
+    fs_Shutdown();
 
     ai_Shutdown();
     broadway_Shutdown();
