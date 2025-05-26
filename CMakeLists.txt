@@ -22,6 +22,9 @@ set(SOURCES
     src/common/bswap.c
     src/common/buffer.c
     src/common/file.c
+    src/core/dev_di.c
+    src/core/es.c
+    src/core/fs.c
     src/core/hle.c
     src/core/memory.c
     src/hw/ai.c
@@ -46,6 +49,9 @@ set(HEADERS
     include/common/config.h
     include/common/file.h
     include/common/types.h
+    include/core/dev_di.h
+    include/core/es.h
+    include/core/fs.h
     include/core/hle.h
     include/core/memory.h
     include/hw/ai.h
