@@ -17,6 +17,7 @@
 #define MASK_PPCCTRL (0x00000039)
 
 #define PPCCTRL (ctx.ppcctrl)
+#define ARMMSG  (ctx.armmsg)
 #define PPCMSG  (ctx.ppcmsg)
 
 enum {
@@ -27,7 +28,7 @@ enum {
 };
 
 typedef struct Context {
-    u32 ppcmsg;
+    u32 armmsg, ppcmsg;
 
     union {
         u32 raw;
@@ -78,7 +79,13 @@ void ipc_CommandCompleted() {
     
     PPCCTRL.y1 = 1;
 
+    ARMMSG = PPCMSG;
+
     CheckHwInterrupt();
+}
+
+u32 ipc_ReadArmMessage() {
+    return ARMMSG;
 }
 
 u32 ipc_ReadPpcControl() {

@@ -14,6 +14,7 @@ void ipc_Shutdown();
 void ipc_CommandAcknowledged();
 void ipc_CommandCompleted();
 
+u32 ipc_ReadArmMessage();
 u32 ipc_ReadPpcControl();
 
 void ipc_WritePpcControl(const u32 data);
