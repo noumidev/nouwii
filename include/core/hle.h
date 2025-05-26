@@ -7,6 +7,10 @@
 
 #include "common/types.h"
 
+enum {
+    IOS_OK = 0,
+};
+
 void hle_Initialize();
 void hle_Reset();
 void hle_Shutdown();
