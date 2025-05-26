@@ -47,6 +47,7 @@ enum {
     PRIMARY_SUBFIC       =  8,
     PRIMARY_CMPLI        = 10,
     PRIMARY_CMPI         = 11,
+    PRIMARY_ADDIC        = 12,
     PRIMARY_ADDICrc      = 13,
     PRIMARY_ADDI         = 14,
     PRIMARY_ADDIS        = 15,
@@ -95,22 +96,26 @@ enum {
     SECONDARY_SUBF   =   40,
     SECONDARY_LWZUX  =   55,
     SECONDARY_ANDC   =   60,
+    SECONDARY_MULHW  =   75,
     SECONDARY_MFMSR  =   83,
     SECONDARY_DCBF   =   86,
+    SECONDARY_LBZX   =   87,
     SECONDARY_NEG    =  104,
     SECONDARY_NOR    =  124,
-    SECONDARY_SUBE   =  136,
+    SECONDARY_SUBFE  =  136,
     SECONDARY_ADDE   =  138,
     SECONDARY_MTCR   =  144,
     SECONDARY_MTMSR  =  146,
     SECONDARY_STWX   =  151,
     SECONDARY_STWUX  =  183,
+    SECONDARY_SUBFZE =  200,
     SECONDARY_ADDZE  =  202,
     SECONDARY_MTSR   =  210,
     SECONDARY_STBX   =  215,
     SECONDARY_MULLW  =  235,
     SECONDARY_ADD    =  266,
     SECONDARY_LHZX   =  279,
+    SECONDARY_XOR    =  316,
     SECONDARY_MFSPR  =  339,
     SECONDARY_MFTB   =  371,
     SECONDARY_STHX   =  407,
@@ -1025,6 +1030,18 @@ static void ADDI(const u32 instr) {
 #endif
 }
 
+static void ADDIC(const u32 instr) {
+    const u64 n = (u64)ctx.r[RA] + (u64)SIMM;
+
+    XER.ca = (n >> 32) & 1;
+
+    ctx.r[RD] = ctx.r[RA] + (u64)SIMM;
+
+#ifdef BROADWAY_DEBUG
+    printf("PPC [%08X] addic r%u, r%u, %X; r%u: %08X, xer: %08X\n", CIA, RD, RA, UIMM, RD, ctx.r[RD], XER.raw);
+#endif
+}
+
 static void ADDICrc(const u32 instr) {
     const u64 n = (u64)ctx.r[RA] + (u64)SIMM;
 
@@ -1466,6 +1483,20 @@ static void LBZU(const u32 instr) {
 #endif
 }
 
+static void LBZX(const u32 instr) {
+    u32 addr = ctx.r[RB];
+
+    if (RA != 0) {
+        addr += ctx.r[RA];
+    }
+
+    ctx.r[RD] = (u32)Read8(addr, NOUWII_FALSE);
+
+#ifdef BROADWAY_DEBUG
+    printf("PPC [%08X] lhzx r%u, r%u, r%u; r%u: %08X [%08X]\n", CIA, RD, RA, RB, RD, ctx.r[RD], addr);
+#endif
+}
+
 static void LFD(const u32 instr) {
     u32 addr = SIMM;
 
@@ -1694,6 +1725,18 @@ static void MTSR(const u32 instr) {
     // TODO: Implement SRs
 #ifdef BROADWAY_DEBUG
     printf("PPC [%08X] mtsr sr%u, r%u; sr%u: %08X\n", CIA, RA, RS, RA, ctx.r[RS]);
+#endif
+}
+
+static void MULHW(const u32 instr) {
+    ctx.r[RD] = (u32)(((i64)ctx.r[RA] * (i64)ctx.r[RB]) >> 32);
+
+    if (RC) {
+        SetFlags(0, ctx.r[RD]);
+    }
+
+#ifdef BROADWAY_DEBUG
+    printf("PPC [%08X] mulhw%s r%u, r%u, r%u; r%u: %08X\n", CIA, (RC) ? "." : "", RD, RA, RB, RD, ctx.r[RD]);
 #endif
 }
 
@@ -2204,7 +2247,7 @@ static void STWX(const u32 instr) {
 #endif
 }
 
-static void SUBE(const u32 instr) {
+static void SUBFE(const u32 instr) {
     const u64 n = (u64)(u32)(~ctx.r[RA]) + (u64)ctx.r[RB] + (u64)XER.ca;
 
     XER.ca = (n >> 32) & 1;
@@ -2216,7 +2259,7 @@ static void SUBE(const u32 instr) {
     }
 
 #ifdef BROADWAY_DEBUG
-    printf("PPC [%08X] sube%s r%u, r%u, r%u; r%u: %08X, xer: %08X\n", CIA, (RC) ? "." : "", RD, RA, RB, RD, ctx.r[RD], XER.raw);
+    printf("PPC [%08X] subfe%s r%u, r%u, r%u; r%u: %08X, xer: %08X\n", CIA, (RC) ? "." : "", RD, RA, RB, RD, ctx.r[RD], XER.raw);
 #endif
 }
 
@@ -2260,11 +2303,39 @@ static void SUBFIC(const u32 instr) {
 #endif
 }
 
+static void SUBFZE(const u32 instr) {
+    const u64 n = (u64)(u32)(~ctx.r[RA]) + (u64)XER.ca;
+
+    XER.ca = (n >> 32) & 1;
+
+    ctx.r[RD] = (u32)n;
+
+    if (RC) {
+        SetFlags(0, ctx.r[RD]);
+    }
+
+#ifdef BROADWAY_DEBUG
+    printf("PPC [%08X] subfze%s r%u, r%u, r%u; r%u: %08X, xer: %08X\n", CIA, (RC) ? "." : "", RD, RA, RB, RD, ctx.r[RD], XER.raw);
+#endif
+}
+
 static void SYNC(const u32 instr) {
     (void)instr;
 
 #ifdef BROADWAY_DEBUG
     printf("PPC [%08X] sync\n", CIA);
+#endif
+}
+
+static void XOR(const u32 instr) {
+    ctx.r[RA] = ctx.r[RS] ^ ctx.r[RB];
+
+    if (RC) {
+        SetFlags(0, ctx.r[RA]);
+    }
+
+#ifdef BROADWAY_DEBUG
+    printf("PPC [%08X] xor%s r%u, r%u, r%u; r%u: %08X\n", CIA, (RC) ? "." : "", RA, RS, RB, RA, ctx.r[RA]);
 #endif
 }
 
@@ -2306,6 +2377,9 @@ static void ExecInstr(const u32 instr) {
             break;
         case PRIMARY_CMPI:
             CMPI(instr);
+            break;
+        case PRIMARY_ADDIC:
+            ADDIC(instr);
             break;
         case PRIMARY_ADDICrc:
             ADDICrc(instr);
@@ -2407,11 +2481,17 @@ static void ExecInstr(const u32 instr) {
                 case SECONDARY_ANDC:
                     ANDC(instr);
                     break;
+                case SECONDARY_MULHW:
+                    MULHW(instr);
+                    break;
                 case SECONDARY_MFMSR:
                     MFMSR(instr);
                     break;
                 case SECONDARY_DCBF:
                     DCBF(instr);
+                    break;
+                case SECONDARY_LBZX:
+                    LBZX(instr);
                     break;
                 case SECONDARY_NEG:
                     NEG(instr);
@@ -2419,8 +2499,8 @@ static void ExecInstr(const u32 instr) {
                 case SECONDARY_NOR:
                     NOR(instr);
                     break;
-                case SECONDARY_SUBE:
-                    SUBE(instr);
+                case SECONDARY_SUBFE:
+                    SUBFE(instr);
                     break;
                 case SECONDARY_ADDE:
                     ADDE(instr);
@@ -2436,6 +2516,9 @@ static void ExecInstr(const u32 instr) {
                     break;
                 case SECONDARY_STWUX:
                     STWUX(instr);
+                    break;
+                case SECONDARY_SUBFZE:
+                    SUBFZE(instr);
                     break;
                 case SECONDARY_ADDZE:
                     ADDZE(instr);
@@ -2454,6 +2537,9 @@ static void ExecInstr(const u32 instr) {
                     break;
                 case SECONDARY_LHZX:
                     LHZX(instr);
+                    break;
+                case SECONDARY_XOR:
+                    XOR(instr);
                     break;
                 case SECONDARY_MFSPR:
                     MFSPR(instr);
