@@ -88,7 +88,7 @@ u##size ReadIo##size(const u32 addr) {                       \
         return dsp_ReadIo##size(addr);                       \
     }                                                        \
                                                              \
-    if ((addr & ~(SIZE_HW - 1)) == BASE_HW) {                \
+    if ((addr & ~((SIZE_HW - 1) | (1 << 23))) == BASE_HW) {  \
         return hollywood_ReadIo##size(addr);                 \
     }                                                        \
                                                              \
@@ -148,7 +148,7 @@ void WriteIo##size(const u32 addr, const u##size data) {                        
         return;                                                                 \
     }                                                                           \
                                                                                 \
-    if ((addr & ~(SIZE_HW - 1)) == BASE_HW) {                                   \
+    if ((addr & ~((SIZE_HW - 1) | (1 << 23))) == BASE_HW) {                     \
         hollywood_WriteIo##size(addr, data);                                    \
         return;                                                                 \
     }                                                                           \
