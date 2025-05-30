@@ -26,6 +26,7 @@ set(SOURCES
     src/core/es.c
     src/core/fs.c
     src/core/hle.c
+    src/core/loader.c
     src/core/memory.c
     src/core/scheduler.c
     src/hw/ai.c
@@ -54,6 +55,7 @@ set(HEADERS
     include/core/es.h
     include/core/fs.h
     include/core/hle.h
+    include/core/loader.h
     include/core/memory.h
     include/core/scheduler.h
     include/hw/ai.h
