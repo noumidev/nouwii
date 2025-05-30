@@ -113,6 +113,9 @@ void nouwii_Reset() {
     InitializeGlobals();
 
     broadway_SetEntry(loader_GetEntry());
+
+    // Enable IPC interrupts in Hollywood
+    hollywood_WriteIo32(0xD000034, 1 << HOLLYWOOD_IRQ_BROADWAY_IPC);
 }
 
 void nouwii_Shutdown() {
@@ -140,7 +143,6 @@ void nouwii_Shutdown() {
 void nouwii_Run() {
     while (NOUWII_TRUE) {
         scheduler_Run();
-        broadway_Run();
     }
 }
 

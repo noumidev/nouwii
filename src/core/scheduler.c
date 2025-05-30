@@ -111,7 +111,11 @@ void scheduler_Run() {
         *cyclesToRun = MAX_CYCLES_TO_RUN;
     } else {
         *cyclesToRun = event->cycles;
+    }
 
+    broadway_Run();
+
+    if (event != NULL) {
         event->callback(event->arg);
         event->cycles = 0;
     }
