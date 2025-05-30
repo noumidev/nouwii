@@ -7,6 +7,8 @@
 
 #include "common/types.h"
 
+#define TO_PHYSICAL(addr) (addr & ~0xE0000000)
+
 #define MAKEDECL_GET(size) u##size GET##size(const u8* buf, const u64 sizeBuf, const u64 offset);
 
 MAKEDECL_GET(8)
