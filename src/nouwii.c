@@ -14,6 +14,7 @@
 #include "core/fs.h"
 #include "core/hle.h"
 #include "core/memory.h"
+#include "core/scheduler.h"
 
 #include "hw/ai.h"
 #include "hw/broadway.h"
@@ -29,9 +30,8 @@
 
 #define NUM_ARGS (1 + 2)
 
-#define MAX_CYCLES_TO_RUN (64)
-
 void nouwii_Initialize(const common_Config* config) {
+    scheduler_Initialize();
     memory_Initialize(config->pathMem1, config->pathMem2);
     hle_Initialize();
 
@@ -53,6 +53,7 @@ void nouwii_Initialize(const common_Config* config) {
 }
 
 void nouwii_Reset() {
+    scheduler_Reset();
     memory_Reset();
     hle_Reset();
 
@@ -74,6 +75,7 @@ void nouwii_Reset() {
 }
 
 void nouwii_Shutdown() {
+    scheduler_Shutdown();
     memory_Shutdown();
     hle_Shutdown();
 
@@ -96,11 +98,10 @@ void nouwii_Shutdown() {
 
 void nouwii_Run() {
     while (NOUWII_TRUE) {
-        *broadway_GetCyclesToRun() = MAX_CYCLES_TO_RUN;
-
+        scheduler_Run();
         broadway_Run();
 
-        hle_Tick(MAX_CYCLES_TO_RUN);
+        // hle_Tick(MAX_CYCLES_TO_RUN);
     }
 }
 
