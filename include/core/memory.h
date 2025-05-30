@@ -10,7 +10,7 @@
 #define MAKEDECL_READ(size) u##size memory_Read##size(const u32 addr);
 #define MAKEDECL_WRITE(size) void memory_Write##size(const u32 addr, const u##size data);
 
-void memory_Initialize(const char* pathMem1, const char* pathMem2);
+void memory_Initialize();
 void memory_Reset();
 void memory_Shutdown();
 

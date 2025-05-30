@@ -12,7 +12,6 @@
 
 #include "common/bswap.h"
 #include "common/buffer.h"
-#include "common/file.h"
 
 #include "hw/ai.h"
 #include "hw/di.h"
@@ -187,19 +186,22 @@ typedef struct Context {
 
 static Context ctx;
 
-void memory_Initialize(const char* pathMem1, const char* pathMem2) {
+void memory_Initialize() {
     memset(&ctx, 0, sizeof(ctx));
 
     ctx.tableRd = malloc(SIZE_PAGE_TABLE * sizeof(usize));
     ctx.tableWr = malloc(SIZE_PAGE_TABLE * sizeof(usize));
 
-    common_LoadFile(pathMem1, (void**)&ctx.mem1);
-    common_LoadFile(pathMem2, (void**)&ctx.mem2);
+    ctx.mem1 = malloc(SIZE_MEM1);
+    ctx.mem2 = malloc(SIZE_MEM2);
 }
 
 void memory_Reset() {
     memset(ctx.tableRd, 0, SIZE_PAGE_TABLE * sizeof(usize));
     memset(ctx.tableWr, 0, SIZE_PAGE_TABLE * sizeof(usize));
+
+    memset(ctx.mem1, 0, SIZE_MEM1);
+    memset(ctx.mem2, 0, SIZE_MEM2);
 
     memory_Map(ctx.mem1, BASE_MEM1, SIZE_MEM1, NOUWII_TRUE, NOUWII_TRUE);
     memory_Map(ctx.mem2, BASE_MEM2, SIZE_MEM2, NOUWII_TRUE, NOUWII_TRUE);
