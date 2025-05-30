@@ -62,19 +62,18 @@ static void AddEventToQueue(Event* event) {
 }
 
 static Event* GetNextEvent() {
-    for (int i = 0; i < MAX_EVENTS; i++) {
-        Event** queuedEvent = &eventQueue[i];
+    Event** queuedEvent = &eventQueue[0];
 
-        if (*queuedEvent != NULL) {
-            if (i > 0) {
-                memmove(&eventQueue[i], &eventQueue[i - 1], sizeof(Event*) * i);
-            }
-
-            return *queuedEvent;
-        }
+    if (*queuedEvent == NULL) {
+        // Event queue is empty
+        return NULL;
     }
 
-    return NULL;
+    Event* event = *queuedEvent;
+
+    memmove(&eventQueue[0], &eventQueue[1], sizeof(Event*) * (MAX_EVENTS - 1));
+
+    return event;
 }
 
 void scheduler_Initialize() {
@@ -98,7 +97,7 @@ void scheduler_ScheduleEvent(const char* name, scheduler_Callback callback, cons
     event->name = name;
     event->callback = callback;
     event->arg = arg;
-    event->cycles = cycles - *broadway_GetCyclesToRun();
+    event->cycles = cycles - *broadway_GetCyclesToRun(); // Maybe?
 
     AddEventToQueue(event);
 }
