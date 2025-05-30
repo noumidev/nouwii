@@ -6,6 +6,5 @@
 #pragma once
 
 typedef struct common_Config {
-    const char* pathMem1;
-    const char* pathMem2;
+    const char* pathDol;
 } common_Config;
