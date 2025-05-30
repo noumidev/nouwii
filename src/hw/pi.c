@@ -114,18 +114,24 @@ MAKEFUNC_PI_WRITEIO(64)
 
 void pi_WriteIo32(const u32 addr, const u32 data) {
     switch (addr) {
+        case PI_INTFLAG:
+            printf("PI_INTFLAG write32 (data: %08X)\n", data);
+
+            // Is this how it works?
+            INTFLAG &= ~data;
+            break;
         case PI_INTMASK:
             printf("PI_INTMASK write32 (data: %08X)\n", data);
 
             INTMASK = data;
-
-            if (pi_IsIrqAsserted()) {
-                broadway_TryInterrupt();
-            }
             break;
         default:
             printf("PI Unimplemented write32 (address: %08X, data: %08X)\n", addr, data);
 
             exit(1); 
+    }
+
+    if (pi_IsIrqAsserted()) {
+        broadway_TryInterrupt();
     }
 }
