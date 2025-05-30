@@ -8,7 +8,8 @@
 #include "common/types.h"
 
 enum {
-    IOS_OK = 0,
+    IOS_NG = -1,
+    IOS_OK =  0,
 };
 
 void hle_Initialize();
