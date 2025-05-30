@@ -10,12 +10,14 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "common/bswap.h"
+
 #define MAKEFUNC_GET(size)                                              \
 u##size GET##size(const u8* buf, const u64 sizeBuf, const u64 offset) { \
     assert((offset + sizeof(u##size)) < sizeBuf);                       \
     u##size data;                                                       \
     memcpy(&data, &buf[offset], sizeof(u##size));                       \
-    return data;                                                        \
+    return common_Bswap##size(data);                                    \
 }                                                                       \
 
 MAKEFUNC_GET(8)
