@@ -74,12 +74,12 @@ void ipc_CommandAcknowledged() {
     CheckHwInterrupt();
 }
 
-void ipc_CommandCompleted() {
-    printf("IPC Completed command\n");
+void ipc_CommandCompleted(const u32 armmsg) {
+    printf("IPC Completed command (ARMMSG: %08X)\n", armmsg);
+
+    ARMMSG = armmsg;
     
     PPCCTRL.y1 = 1;
-
-    ARMMSG = PPCMSG;
 
     CheckHwInterrupt();
 }

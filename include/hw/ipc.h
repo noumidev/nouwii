@@ -12,7 +12,7 @@ void ipc_Reset();
 void ipc_Shutdown();
 
 void ipc_CommandAcknowledged();
-void ipc_CommandCompleted();
+void ipc_CommandCompleted(const u32 armmsg);
 
 u32 ipc_ReadArmMessage();
 u32 ipc_ReadPpcControl();
