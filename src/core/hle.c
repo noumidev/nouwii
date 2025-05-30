@@ -145,9 +145,11 @@ static u32 CloseFile(const i32 fd) {
 
     File* file = &files[fd];
 
-    assert(file->opened);
-
     printf("HLE IPC_Close (fd: %d, name: %s)\n", fd, file->name);
+
+    if (!file->opened) {
+        return IOS_NG;
+    }
 
     file->opened = NOUWII_FALSE;
 
