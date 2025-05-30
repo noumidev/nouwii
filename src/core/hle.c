@@ -16,6 +16,7 @@
 #include "core/es.h"
 #include "core/fs.h"
 #include "core/memory.h"
+#include "core/scheduler.h"
 
 #include "hw/ipc.h"
 
@@ -24,7 +25,7 @@
 #define MAX_FILES     (128)
 #define MAX_FILE_NAME (129)
 
-#define NUM_TASK_CYCLES (64)
+#define NUM_TASK_CYCLES (128)
 
 enum {
     COMMAND_OPEN     = 1,
@@ -200,29 +201,11 @@ static u32 SeekFile(const i32 fd, const u32 offset, const u32 origin) {
     return IOS_OK;
 }
 
-void hle_Initialize() {
-
+static void CompleteCommand(const int armmsg) {
+    ipc_CommandCompleted(armmsg);
 }
 
-void hle_Reset() {
-    memset(&ctx, 0, sizeof(ctx));
-    memset(files, 0, sizeof(files));
-
-    for (int i = 0; i < MAX_FILES; i++) {
-        File* file = &files[i];
-
-        file->ioctl = DummyIoctl;
-        file->ioctlv = DummyIoctlv;
-    }
-}
-
-void hle_Shutdown() {
-
-}
-
-void hle_IpcExecute(const u32 ppcmsg) {
-    assert(ctx.currentTask == TASK_NONE);
-
+static void ProcessCommand(const int ppcmsg) {
     Packet packet;
 
     for (u32 i = 0; i < sizeof(packet); i += sizeof(u32)) {
@@ -283,36 +266,35 @@ void hle_IpcExecute(const u32 ppcmsg) {
 
     printf("\n");
 
-    ctx.taskTimer = NUM_TASK_CYCLES;
-    ctx.currentTask = TASK_ACKNOWLEDGE;
+    ipc_CommandAcknowledged();
+
+    scheduler_ScheduleEvent("hle_CompleteCommand", CompleteCommand, ppcmsg, NUM_TASK_CYCLES);
+}
+
+void hle_Initialize() {
+
+}
+
+void hle_Reset() {
+    memset(&ctx, 0, sizeof(ctx));
+    memset(files, 0, sizeof(files));
+
+    for (int i = 0; i < MAX_FILES; i++) {
+        File* file = &files[i];
+
+        file->ioctl = DummyIoctl;
+        file->ioctlv = DummyIoctlv;
+    }
+}
+
+void hle_Shutdown() {
+
+}
+
+void hle_IpcExecute(const u32 ppcmsg) {
+    scheduler_ScheduleEvent("hle_ProcessCommand", ProcessCommand, ppcmsg, NUM_TASK_CYCLES);
 }
 
 void hle_IpcRelaunch() {
     printf("HLE Relaunch IPC\n");
-}
-
-void hle_Tick(const i64 cycles) {
-    if (ctx.taskTimer <= 0) {
-        return;
-    }
-
-    ctx.taskTimer -= cycles;
-
-    if (ctx.taskTimer <= 0) {
-        switch (ctx.currentTask) {
-            case TASK_ACKNOWLEDGE:
-                ipc_CommandAcknowledged();
-
-                ctx.taskTimer = NUM_TASK_CYCLES;
-                ctx.currentTask = TASK_COMMAND_COMPLETED;
-                break;
-            case TASK_COMMAND_COMPLETED:
-                ipc_CommandCompleted();
-
-                ctx.currentTask = TASK_NONE;
-                break;
-            default:
-                break;
-        }
-    }
 }
