@@ -855,6 +855,8 @@ static void SetSpr(const u32 spr, const u32 data) {
             break;
         case SPR_DEC:
             printf("DEC write (data: %08X)\n", data);
+            
+            assert(data == 0);
 
             DEC.raw = data;
             break;
@@ -2691,12 +2693,6 @@ void broadway_Initialize() {
 
 void broadway_Reset() {
     memset(&ctx, 0, sizeof(ctx));
-
-    // HLE boot stub
-    IA = INITIAL_PC;
-
-    // Clear init semaphore
-    Write32(0x3160, 0);
 }
 
 void broadway_Shutdown() {
@@ -2711,6 +2707,10 @@ void broadway_Run() {
 
         IncrementTbr();
     }
+}
+
+void broadway_SetEntry(const u32 addr) {
+    IA = addr;
 }
 
 void broadway_TryInterrupt() {
