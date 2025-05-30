@@ -18,14 +18,14 @@ enum {
 };
 
 static u32 DvdLowGetCoverRegister(const u32 addr0, const u32 size0, const u32 addr1, const u32 size1) {
-    (void)addr1;
-    (void)size1;
+    (void)addr0;
+    (void)size0;
 
-    assert(size0 >= sizeof(u32));
+    assert(size1 >= sizeof(u32));
 
-    printf("DI DvdLowGetCoverRegister (addr: %08X, size: %u)\n", addr0, size0);
+    printf("DI DvdLowGetCoverRegister (addr: %08X, size: %u)\n", addr1, size1);
 
-    memset(memory_GetPointer(addr0), 0, size0);
+    memset(memory_GetPointer(addr1), 0, sizeof(u32));
 
     return IOS_OK;
 }
