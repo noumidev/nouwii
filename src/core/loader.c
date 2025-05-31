@@ -61,7 +61,7 @@ void loader_LoadDol() {
 
     printf("Clearing BSS (address: %08X, size: %u)\n", addrBss, sizeBss);
 
-    memset(memory_GetPointer(TO_PHYSICAL(addrBss)), 0, size);
+    memset(memory_GetPointer(TO_PHYSICAL(addrBss)), 0, sizeBss);
 
     entry = GET32(dol, size, 0xE0);
 
