@@ -90,7 +90,7 @@ MAKEFUNC_HOLLYWOOD_READIO(64)
 u32 hollywood_ReadIo32(const u32 addr) {
     switch (addr) {
         case HW_IPCPPCCTRL:
-            printf("HW_IPCPPCMSG read32\n");
+            printf("HW_IPCPPCCTRL read32\n");
 
             return ipc_ReadPpcControl();
         case HW_IPCARMMSG:
