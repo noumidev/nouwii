@@ -76,6 +76,18 @@ static Event* GetNextEvent() {
     return event;
 }
 
+static void AdvanceEvents(const i64 cycles) {
+    for (int i = 0; i < MAX_EVENTS; i++) {
+        Event* event = eventQueue[i];
+
+        if (event == NULL) {
+            return;
+        }
+
+        event->cycles -= cycles;
+    }
+}
+
 void scheduler_Initialize() {
 
 }
@@ -103,15 +115,17 @@ void scheduler_ScheduleEvent(const char* name, scheduler_Callback callback, cons
 }
 
 void scheduler_Run() {
-    i64* cyclesToRun = broadway_GetCyclesToRun();
+    i64 cycles = MAX_CYCLES_TO_RUN;
 
     Event* event = GetNextEvent();
 
-    if (event == NULL) {
-        *cyclesToRun = MAX_CYCLES_TO_RUN;
-    } else {
-        *cyclesToRun = event->cycles;
+    if (event != NULL) {
+        cycles = event->cycles;
     }
+
+    AdvanceEvents(cycles);
+
+    *broadway_GetCyclesToRun() = cycles;
 
     broadway_Run();
 
