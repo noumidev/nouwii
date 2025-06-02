@@ -6,6 +6,7 @@
 #include "hw/broadway.h"
 
 #include <assert.h>
+#include <math.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -19,6 +20,7 @@
 #include "hw/pi.h"
 
 // #define BROADWAY_DEBUG
+// #define BROADWAY_DEBUG_FLOATS
 
 #define NUM_GPRS  (32)
 #define NUM_FPRS  (32)
@@ -59,8 +61,10 @@ enum {
     PRIMARY_RLWINM       = 21,
     PRIMARY_ORI          = 24,
     PRIMARY_ORIS         = 25,
+    PRIMARY_XORI         = 26,
     PRIMARY_XORIS        = 27,
     PRIMARY_ANDIrc       = 28,
+    PRIMARY_ANDISrc      = 29,
     PRIMARY_REGISTER     = 31,
     PRIMARY_LWZ          = 32,
     PRIMARY_LWZU         = 33,
@@ -71,12 +75,14 @@ enum {
     PRIMARY_STB          = 38,
     PRIMARY_STBU         = 39,
     PRIMARY_LHZ          = 40,
+    PRIMARY_LHA          = 42,
     PRIMARY_STH          = 44,
     PRIMARY_LMW          = 46,
     PRIMARY_STMW         = 47,
     PRIMARY_LFS          = 48,
     PRIMARY_LFD          = 50,
     PRIMARY_STFS         = 52,
+    PRIMARY_STFD         = 54,
     PRIMARY_PSQL         = 56,
     PRIMARY_PSQST        = 60,
     PRIMARY_FLOAT        = 63,
@@ -126,20 +132,27 @@ enum {
     SECONDARY_DCBI   =  470,
     SECONDARY_DIVW   =  491,
     SECONDARY_SRW    =  536,
+    SECONDARY_LSWI   =  597,
     SECONDARY_SYNC   =  598,
+    SECONDARY_LFDX   =  599,
+    SECONDARY_STSWI  =  725,
     SECONDARY_SRAW   =  792,
     SECONDARY_SRAWI  =  824,
     SECONDARY_EXTSH  =  922,
     SECONDARY_EXTSB  =  954,
     SECONDARY_ICBI   =  982,
+    SECONDARY_STFIWX =  983,
     SECONDARY_DCBZ   = 1014,
 };
 
 enum {
+    SYSTEM_MCRF  =   0,
     SYSTEM_BCLR  =  16,
+    SYSTEM_CRNOR =  33,
     SYSTEM_RFI   =  50,
     SYSTEM_ISYNC = 150,
     SYSTEM_CRXOR = 193,
+    SYSTEM_CREQV = 289,
     SYSTEM_BCCTR = 528,
 };
 
@@ -150,7 +163,16 @@ enum {
 };
 
 enum {
+    FLOAT_FCMPU  =   0,
+    FLOAT_FCTIWZ =  15,
+    FLOAT_FDIV   =  18,
+    FLOAT_FSUB   =  20,
+    FLOAT_FADD   =  21,
+    FLOAT_FMUL   =  25,
+    FLOAT_FMSUB  =  28,
+    FLOAT_FMADD  =  29,
     FLOAT_MTFSB1 =  38,
+    FLOAT_FNEG   =  40,
     FLOAT_FMR    =  72,
     FLOAT_MTFSF  = 711,
 };
@@ -159,6 +181,7 @@ enum {
     SPR_XER    =    1,
     SPR_LR     =    8,
     SPR_CTR    =    9,
+    SPR_DAR    =   19,
     SPR_DEC    =   22,
     SPR_SRR0   =   26,
     SPR_SRR1   =   27,
@@ -190,6 +213,7 @@ enum {
 
 enum {
     COND_SO = 0,
+    COND_UN = 0,
     COND_EQ = 1,
     COND_GT = 2,
     COND_LT = 3,
@@ -201,13 +225,11 @@ enum {
 
 #define MAKEFUNC_BROADWAY_READ(size)                        \
 static u##size Read##size(const u32 addr, const int code) { \
-    assert((addr & ((size / 8) - 1)) == 0);                 \
     return memory_Read##size(Translate(addr, code));        \
 }                                                           \
 
 #define MAKEFUNC_BROADWAY_WRITE(size)                         \
 static void Write##size(const u32 addr, const u##size data) { \
-    assert((addr & ((size / 8) - 1)) == 0);                   \
     memory_Write##size(Translate(addr, NOUWII_FALSE), data);  \
 }                                                             \
 
@@ -234,11 +256,14 @@ static u32 SetBits(const u32 n, const u32 start, const u32 end, const u32 data) 
 // Instruction fields
 #define OPCD (GetBits(instr,  0,  5))
 #define   XO (GetBits(instr, 21, 30))
+#define  FXO (GetBits(instr, 26, 30))
+#define   FC (GetBits(instr, 21, 25))
 #define   RA (GetBits(instr, 11, 15))
 #define   RB (GetBits(instr, 16, 20))
 #define   RD (GetBits(instr,  6, 10))
 #define   RS (GetBits(instr,  6, 10))
 #define CRFD (GetBits(instr,  6,  8))
+#define CRFS (GetBits(instr, 11, 13))
 #define   SH (GetBits(instr, 16, 20))
 #define   MB (GetBits(instr, 21, 25))
 #define   ME (GetBits(instr, 26, 30))
@@ -273,6 +298,7 @@ static u32 SetBits(const u32 n, const u32 start, const u32 end, const u32 data) 
 #define   XER (ctx.sprs.xer)
 #define   CTR (ctx.sprs.ctr)
 #define    LR (ctx.sprs.lr)
+#define   DAR (ctx.sprs.dar)
 #define   DEC (ctx.sprs.dec)
 #define   TBR (ctx.sprs.tbr.raw)
 #define   TBL (ctx.sprs.tbr.tbl)
@@ -537,6 +563,8 @@ typedef struct SpecialRegs {
 
     u32 sprg[NUM_SPRGS];
 
+    u32 dar;
+
     u32 lr;
     u32 ctr;
 } SpecialRegs;
@@ -548,7 +576,8 @@ typedef struct Context {
 
     u32 r[NUM_GPRS];
 
-    struct {
+    union {
+        u64 raw[NUM_PS];
         f64 ps[NUM_PS];
     } fprs[NUM_FPRS];
 
@@ -563,7 +592,7 @@ static Context ctx;
 
 static void SaveExceptionContext() {
     // Save IA and MSR
-    SRR0 = CIA + sizeof(u32);
+    SRR0 = IA;
     SRR1.raw &= ~(MASK_SRR1 | MASK_MSR);
     SRR1.raw |= MSR.raw & MASK_MSR;
 
@@ -706,6 +735,10 @@ static u32 GetSpr(const u32 spr) {
             printf("CTR read\n");
 
             return CTR;
+        case SPR_DAR:
+            printf("DAR read\n");
+
+            return DAR;
         case SPR_DEC:
             printf("DEC read\n");
 
@@ -849,9 +882,14 @@ static void SetSpr(const u32 spr, const u32 data) {
             LR = data;
             break;
         case SPR_CTR:
-            printf("CTR write (data: %08X)\n", data);
+            // printf("CTR write (data: %08X)\n", data);
 
             CTR = data;
+            break;
+        case SPR_DAR:
+            printf("DAR write (data: %08X)\n", data);
+
+            DAR = data;
             break;
         case SPR_DEC:
             printf("DEC write (data: %08X)\n", data);
@@ -1122,6 +1160,16 @@ static void ANDIrc(const u32 instr) {
 #endif
 }
 
+static void ANDISrc(const u32 instr) {
+    ctx.r[RA] = ctx.r[RS] & (UIMM << 16);
+
+    SetFlags(0, ctx.r[RA]);
+
+#ifdef BROADWAY_DEBUG
+    printf("PPC [%08X] andis. r%u, r%u, %X; r%u: %08X\n", CIA, RA, RS, UIMM, RA, ctx.r[RA]);
+#endif
+}
+
 static void B(const u32 instr) {
     u32 target = (i32)(LI << 8) >> 6;
 
@@ -1308,6 +1356,22 @@ static void CNTLZW(const u32 instr) {
 #endif
 }
 
+static void CREQV(const u32 instr) {
+    CR = SetBits(CR, RD, RD, ~(GetBits(CR, RA, RA) ^ GetBits(CR, RB, RB)));
+
+#ifdef BROADWAY_DEBUG
+    printf("PPC [%08X] creqv crb%u, crb%u, crb%u; cr: %08X\n", CIA, RD, RA, RB, CR);
+#endif
+}
+
+static void CRNOR(const u32 instr) {
+    CR = SetBits(CR, RD, RD, ~(GetBits(CR, RA, RA) | GetBits(CR, RB, RB)));
+
+#ifdef BROADWAY_DEBUG
+    printf("PPC [%08X] crnor crb%u, crb%u, crb%u; cr: %08X\n", CIA, RD, RA, RB, CR);
+#endif
+}
+
 static void CRXOR(const u32 instr) {
     CR = SetBits(CR, RD, RD, GetBits(CR, RA, RA) ^ GetBits(CR, RB, RB));
 
@@ -1420,6 +1484,75 @@ static void EXTSH(const u32 instr) {
 #endif
 }
 
+static void FADD(const u32 instr) {
+    // TODO: Implement flags
+    assert(!RC);
+
+    ctx.fprs[RD].PS0 = ctx.fprs[RA].PS0 + ctx.fprs[RB].PS0;
+
+#ifdef BROADWAY_DEBUG_FLOATS
+    printf("PPC [%08X] fadd%s f%u, f%u, f%u; ps0: %lf\n", CIA, (RC) ? "." : "", RD, RA, RB, ctx.fprs[RD].PS0);
+#endif
+}
+
+static void FCMPU(const u32 instr) {
+    const f64 a = ctx.fprs[RA].PS0;
+    const f64 b = ctx.fprs[RB].PS0;
+
+    u32 n;
+
+    if (isnan(a) || isnan(b)) {
+        n = COND_UN;
+    } else {
+        if (a < b) {
+            n = 1 << COND_LT;
+        } else if (a > b) {
+            n = 1 << COND_GT;
+        } else {
+            n = 1 << COND_EQ;
+        }
+    }
+
+    SetCr(CRFD, n);
+
+#ifdef BROADWAY_DEBUG_FLOATS
+    printf("PPC [%08X] fcmpu crf%u, f%u, f%u; cr: %08X\n", CIA, CRFD, RA, RB, CR);
+#endif
+}
+
+static void FCTIWZ(const u32 instr) {
+    // TODO: Implement flags
+    assert(!RC);
+
+    ctx.fprs[RD].raw[0] = (u32)floor(ctx.fprs[RB].PS0);
+
+#ifdef BROADWAY_DEBUG_FLOATS
+    printf("PPC [%08X] fctiwz%s f%u, f%u; ps0: %lf\n", CIA, (RC) ? "." : "", RD, RB, ctx.fprs[RD].raw[0]);
+#endif
+}
+
+static void FDIV(const u32 instr) {
+    // TODO: Implement flags
+    assert(!RC);
+
+    ctx.fprs[RD].PS0 = ctx.fprs[RA].PS0 / ctx.fprs[RB].PS0;
+
+#ifdef BROADWAY_DEBUG_FLOATS
+    printf("PPC [%08X] fdiv%s f%u, f%u, f%u; ps0: %lf\n", CIA, (RC) ? "." : "", RD, RA, RB, ctx.fprs[RD].PS0);
+#endif
+}
+
+static void FMADD(const u32 instr) {
+    // TODO: Implement flags
+    assert(!RC);
+
+    ctx.fprs[RD].PS0 = ctx.fprs[RA].PS0 * ctx.fprs[FC].PS0 + ctx.fprs[RB].PS0;
+
+#ifdef BROADWAY_DEBUG_FLOATS
+    printf("PPC [%08X] fmadd%s f%u, f%u, f%u, f%u; ps0: %lf\n", CIA, (RC) ? "." : "", RD, RA, FC, RB, ctx.fprs[RD].PS0);
+#endif
+}
+
 static void FMR(const u32 instr) {
     // TODO: Implement flags
     assert(!RC);
@@ -1430,8 +1563,52 @@ static void FMR(const u32 instr) {
         ctx.fprs[RD].PS1 = ctx.fprs[RB].PS0;
     }
 
-#ifdef BROADWAY_DEBUG
+#ifdef BROADWAY_DEBUG_FLOATS
     printf("PPC [%08X] fmr%s f%u, f%u; ps0: %lf, ps1: %lf\n", CIA, (RC) ? "." : "", RD, RB, ctx.fprs[RD].PS0, ctx.fprs[RD].PS1);
+#endif
+}
+
+static void FMSUB(const u32 instr) {
+    // TODO: Implement flags
+    assert(!RC);
+
+    ctx.fprs[RD].PS0 = ctx.fprs[RA].PS0 * ctx.fprs[FC].PS0 - ctx.fprs[RB].PS0;
+
+#ifdef BROADWAY_DEBUG_FLOATS
+    printf("PPC [%08X] fmsub%s f%u, f%u, f%u, f%u; ps0: %lf\n", CIA, (RC) ? "." : "", RD, RA, FC, RB, ctx.fprs[RD].PS0);
+#endif
+}
+
+static void FMUL(const u32 instr) {
+    // TODO: Implement flags
+    assert(!RC);
+
+    ctx.fprs[RD].PS0 = ctx.fprs[RA].PS0 * ctx.fprs[FC].PS0;
+
+#ifdef BROADWAY_DEBUG_FLOATS
+    printf("PPC [%08X] fmul%s f%u, f%u, f%u; ps0: %lf\n", CIA, (RC) ? "." : "", RD, RA, FC, ctx.fprs[RD].PS0);
+#endif
+}
+
+static void FNEG(const u32 instr) {
+    // TODO: Implement flags
+    assert(!RC);
+
+    ctx.fprs[RD].PS0 = -ctx.fprs[RB].PS0;
+
+#ifdef BROADWAY_DEBUG_FLOATS
+    printf("PPC [%08X] fneg%s f%u, f%u; ps0: %lf\n", CIA, (RC) ? "." : "", RD, RB, ctx.fprs[RD].PS0);
+#endif
+}
+
+static void FSUB(const u32 instr) {
+    // TODO: Implement flags
+    assert(!RC);
+
+    ctx.fprs[RD].PS0 = ctx.fprs[RA].PS0 - ctx.fprs[RB].PS0;
+
+#ifdef BROADWAY_DEBUG_FLOATS
+    printf("PPC [%08X] fsub%s f%u, f%u, f%u; ps0: %lf\n", CIA, (RC) ? "." : "", RD, RA, RB, ctx.fprs[RD].PS0);
 #endif
 }
 
@@ -1508,8 +1685,22 @@ static void LFD(const u32 instr) {
 
     ctx.fprs[RD].PS0 = common_ToF64(Read64(addr, NOUWII_FALSE));
 
-#ifdef BROADWAY_DEBUG
+#ifdef BROADWAY_DEBUG_FLOATS
     printf("PPC [%08X] lfd f%u, %d(r%u); f%u: %lf [%08X]\n", CIA, RD, SIMM, RA, RD, ctx.fprs[RD].PS0, addr);
+#endif
+}
+
+static void LFDX(const u32 instr) {
+    u32 addr = ctx.r[RB];
+
+    if (RA != 0) {
+        addr += ctx.r[RA];
+    }
+
+    ctx.fprs[RD].PS0 = common_ToF64(Read64(addr, NOUWII_FALSE));
+
+#ifdef BROADWAY_DEBUG
+    printf("PPC [%08X] lfdx r%u, r%u, r%u; f%u: %lf [%08X]\n", CIA, RD, RA, RB, RD, ctx.fprs[RD].PS0, addr);
 #endif
 }
 
@@ -1528,8 +1719,22 @@ static void LFS(const u32 instr) {
         ctx.fprs[RD].PS1 = (f64)data;
     }
 
-#ifdef BROADWAY_DEBUG
+#ifdef BROADWAY_DEBUG_FLOATS
     printf("PPC [%08X] lfs f%u, %d(r%u); f%u: %lf [%08X]\n", CIA, RD, SIMM, RA, RD, ctx.fprs[RD].PS0, addr);
+#endif
+}
+
+static void LHA(const u32 instr) {
+    u32 addr = SIMM;
+
+    if (RA != 0) {
+        addr += ctx.r[RA];
+    }
+
+    ctx.r[RD] = (i16)Read16(addr, NOUWII_FALSE);
+
+#ifdef BROADWAY_DEBUG
+    printf("PPC [%08X] lha r%u, %d(r%u); r%u: %08X [%08X]\n", CIA, RD, SIMM, RA, RD, ctx.r[RD], addr);
 #endif
 }
 
@@ -1540,7 +1745,7 @@ static void LHZ(const u32 instr) {
         addr += ctx.r[RA];
     }
 
-    ctx.r[RD] = (u16)Read16(addr, NOUWII_FALSE);
+    ctx.r[RD] = (u32)Read16(addr, NOUWII_FALSE);
 
 #ifdef BROADWAY_DEBUG
     printf("PPC [%08X] lhz r%u, %d(r%u); r%u: %08X [%08X]\n", CIA, RD, SIMM, RA, RD, ctx.r[RD], addr);
@@ -1578,6 +1783,38 @@ static void LMW(const u32 instr) {
 
 #ifdef BROADWAY_DEBUG
     printf("PPC [%08X] lmw r%u, %d(r%u)\n", CIA, RS, SIMM, RA);
+#endif
+}
+
+static void LSWI(const u32 instr) {
+    u32 addr = 0;
+
+    if (RA != 0) {
+        addr += ctx.r[RA];
+    }
+
+    int n = RB;
+
+    // NB = 0 encodes 32
+    if (n == 0) {
+        n = 32;
+    }
+
+    u32 r = RD;
+    u32 i = 0;
+
+    for (; n > 0; n--) {
+        ctx.r[r] = SetBits(ctx.r[r], i, i + 7, (u32)Read8(addr++, NOUWII_FALSE));
+
+        i = (i + 8) & 31;
+
+        if (i == 0) {
+            r = (r + 1) & (NUM_GPRS - 1);
+        }
+    }
+
+#ifdef BROADWAY_DEBUG
+    printf("PPC [%08X] lswi r%u, r%u, %u\n", CIA, RD, RA, RB);
 #endif
 }
 
@@ -1637,6 +1874,14 @@ static void LWZX(const u32 instr) {
 #endif
 }
 
+static void MCRF(const u32 instr) {
+    CR = SetBits(CR, 4 * CRFD, 4 * CRFD + 3, GetBits(CR, 4 * CRFS, 4 * CRFS + 3));
+
+#ifdef BROADWAY_DEBUG
+    printf("PPC [%08X] mcrf crf%u, crf%u; cr: %08X\n", CIA, CRFD, CRFS, CR);
+#endif
+}
+
 static void MFCR(const u32 instr) {
     ctx.r[RD] = CR;
 
@@ -1682,7 +1927,7 @@ static void MTFSB1(const u32 instr) {
 
     FPSCR = SetBits(FPSCR, RD, RD, 1);
 
-#ifdef BROADWAY_DEBUG
+#ifdef BROADWAY_DEBUG_FLOATS
     printf("PPC [%08X] mtfsb1 crb%u; fpscr: %08X\n", CIA, RD, FPSCR);
 #endif
 }
@@ -1698,7 +1943,7 @@ static void MTFSF(const u32 instr) {
         }
     }
 
-#ifdef BROADWAY_DEBUG
+#ifdef BROADWAY_DEBUG_FLOATS
     printf("PPC [%08X] mtfsf %02X, f%u; fpscr: %08X\n", CIA, FM, RB, FPSCR);
 #endif
 }
@@ -1847,7 +2092,7 @@ static void PSMERGE01(const u32 instr) {
     ctx.fprs[RD].PS0 = ctx.fprs[RA].PS0;
     ctx.fprs[RD].PS1 = ctx.fprs[RB].PS1;
 
-#ifdef BROADWAY_DEBUG
+#ifdef BROADWAY_DEBUG_FLOATS
     printf("PPC [%08X] ps_merge01%s f%u, f%u, f%u; ps0: %lf, ps1: %lf\n", CIA, (RC) ? "." : "", RD, RA, RB, ctx.fprs[RD].PS0, ctx.fprs[RD].PS1);
 #endif
 }
@@ -1861,7 +2106,7 @@ static void PSMERGE10(const u32 instr) {
     ctx.fprs[RD].PS0 = ctx.fprs[RA].PS1;
     ctx.fprs[RD].PS1 = ctx.fprs[RB].PS0;
 
-#ifdef BROADWAY_DEBUG
+#ifdef BROADWAY_DEBUG_FLOATS
     printf("PPC [%08X] ps_merge10%s f%u, f%u, f%u; ps0: %lf, ps1: %lf\n", CIA, (RC) ? "." : "", RD, RA, RB, ctx.fprs[RD].PS0, ctx.fprs[RD].PS1);
 #endif
 }
@@ -1874,7 +2119,7 @@ static void PSMR(const u32 instr) {
 
     ctx.fprs[RD] = ctx.fprs[RB];
 
-#ifdef BROADWAY_DEBUG
+#ifdef BROADWAY_DEBUG_FLOATS
     printf("PPC [%08X] ps_mr%s f%u, f%u; ps0: %lf, ps1: %lf\n", CIA, (RC) ? "." : "", RD, RB, ctx.fprs[RD].PS0, ctx.fprs[RD].PS1);
 #endif
 }
@@ -1913,7 +2158,7 @@ static void PSQL(const u32 instr) {
         }
     }
 
-#ifdef BROADWAY_DEBUG
+#ifdef BROADWAY_DEBUG_FLOATS
     printf("PPC [%08X] psq_l f%u, %d(r%u), %d, %u; ps0: %lf, ps1: %lf [%08X]\n", CIA, RD, (i32)(D << 20) >> 20, RA, W, I, ctx.fprs[RD].PS0, ctx.fprs[RD].PS1, addr);
 #endif
 }
@@ -1950,7 +2195,7 @@ static void PSQST(const u32 instr) {
         }
     }
 
-#ifdef BROADWAY_DEBUG
+#ifdef BROADWAY_DEBUG_FLOATS
     printf("PPC [%08X] psq_st f%u, %d(r%u), %d, %u;[%08X]: %lf, %lf\n", CIA, RS, (i32)(D << 20) >> 20, RA, W, I, addr, ctx.fprs[RS].PS0, ctx.fprs[RS].PS1);
 #endif
 }
@@ -2132,6 +2377,34 @@ static void STBX(const u32 instr) {
 #endif
 }
 
+static void STFD(const u32 instr) {
+    u32 addr = SIMM;
+
+    if (RA != 0) {
+        addr += ctx.r[RA];
+    }
+
+    Write64(addr, common_FromF64(ctx.fprs[RS].PS0));
+
+#ifdef BROADWAY_DEBUG_FLOATS
+    printf("PPC [%08X] stfd f%u, %d(r%u); [%08X]: %lf\n", CIA, RS, SIMM, RA, addr, ctx.fprs[RD].PS0);
+#endif
+}
+
+static void STFIWX(const u32 instr) {
+    u32 addr = ctx.r[RB];
+
+    if (RA != 0) {
+        addr += ctx.r[RA];
+    }
+
+    Write32(addr, (u32)ctx.fprs[RS].raw[0]);
+
+#ifdef BROADWAY_DEBUG
+    printf("PPC [%08X] stwx fr%u, r%u, r%u; [%08X]: %08X\n", CIA, RS, RA, RB, addr, (u32)ctx.fprs[RS].raw[0]);
+#endif
+}
+
 static void STFS(const u32 instr) {
     u32 addr = SIMM;
 
@@ -2141,7 +2414,7 @@ static void STFS(const u32 instr) {
 
     Write32(addr, common_FromF32((f32)ctx.fprs[RS].PS0));
 
-#ifdef BROADWAY_DEBUG
+#ifdef BROADWAY_DEBUG_FLOATS
     printf("PPC [%08X] stfs f%u, %d(r%u); [%08X]: %lf\n", CIA, RS, SIMM, RA, addr, ctx.fprs[RD].PS0);
 #endif
 }
@@ -2189,6 +2462,38 @@ static void STMW(const u32 instr) {
 
 #ifdef BROADWAY_DEBUG
     printf("PPC [%08X] stmw r%u, %d(r%u); [%08X]: %08X\n", CIA, RS, SIMM, RA, addr, ctx.r[RS]);
+#endif
+}
+
+static void STSWI(const u32 instr) {
+    u32 addr = 0;
+
+    if (RA != 0) {
+        addr += ctx.r[RA];
+    }
+
+    int n = RB;
+
+    // NB = 0 encodes 32
+    if (n == 0) {
+        n = 32;
+    }
+
+    u32 r = RS;
+    u32 i = 0;
+
+    for (; n > 0; n--) {
+        Write8(addr++, GetBits(ctx.r[r], i, i + 7));
+
+        i = (i + 8) & 31;
+
+        if (i == 0) {
+            r = (r + 1) & (NUM_GPRS - 1);
+        }
+    }
+
+#ifdef BROADWAY_DEBUG
+    printf("PPC [%08X] stswi r%u, r%u, %u\n", CIA, RS, RA, RB);
 #endif
 }
 
@@ -2341,6 +2646,14 @@ static void XOR(const u32 instr) {
 #endif
 }
 
+static void XORI(const u32 instr) {
+    ctx.r[RA] = ctx.r[RS] ^ UIMM;
+
+#ifdef BROADWAY_DEBUG
+    printf("PPC [%08X] xori r%u, r%u, %X; r%u: %08X\n", CIA, RA, RS, UIMM, RA, ctx.r[RA]);
+#endif
+}
+
 static void XORIS(const u32 instr) {
     ctx.r[RA] = ctx.r[RS] ^ (UIMM << 16);
 
@@ -2403,8 +2716,14 @@ static void ExecInstr(const u32 instr) {
             break;
         case PRIMARY_SYSTEM:
             switch (XO) {
+                case SYSTEM_MCRF:
+                    MCRF(instr);
+                    break;
                 case SYSTEM_BCLR:
                     BCLR(instr);
+                    break;
+                case SYSTEM_CRNOR:
+                    CRNOR(instr);
                     break;
                 case SYSTEM_RFI:
                     RFI(instr);
@@ -2414,6 +2733,9 @@ static void ExecInstr(const u32 instr) {
                     break;
                 case SYSTEM_CRXOR:
                     CRXOR(instr);
+                    break;
+                case SYSTEM_CREQV:
+                    CREQV(instr);
                     break;
                 case SYSTEM_BCCTR:
                     BCCTR(instr);
@@ -2436,11 +2758,17 @@ static void ExecInstr(const u32 instr) {
         case PRIMARY_ORIS:
             ORIS(instr);
             break;
+        case PRIMARY_XORI:
+            XORI(instr);
+            break;
         case PRIMARY_XORIS:
             XORIS(instr);
             break;
         case PRIMARY_ANDIrc:
             ANDIrc(instr);
+            break;
+        case PRIMARY_ANDISrc:
+            ANDISrc(instr);
             break;
         case PRIMARY_REGISTER:
             switch (XO) {
@@ -2573,8 +2901,17 @@ static void ExecInstr(const u32 instr) {
                 case SECONDARY_SRW:
                     SRW(instr);
                     break;
+                case SECONDARY_LSWI:
+                    LSWI(instr);
+                    break;
                 case SECONDARY_SYNC:
                     SYNC(instr);
+                    break;
+                case SECONDARY_LFDX:
+                    LFDX(instr);
+                    break;
+                case SECONDARY_STSWI:
+                    STSWI(instr);
                     break;
                 case SECONDARY_SRAW:
                     SRAW(instr);
@@ -2590,6 +2927,9 @@ static void ExecInstr(const u32 instr) {
                     break;
                 case SECONDARY_ICBI:
                     ICBI(instr);
+                    break;
+                case SECONDARY_STFIWX:
+                    STFIWX(instr);
                     break;
                 case SECONDARY_DCBZ:
                     DCBZ(instr);
@@ -2627,6 +2967,9 @@ static void ExecInstr(const u32 instr) {
         case PRIMARY_LHZ:
             LHZ(instr);
             break;
+        case PRIMARY_LHA:
+            LHA(instr);
+            break;
         case PRIMARY_STH:
             STH(instr);
             break;
@@ -2645,6 +2988,9 @@ static void ExecInstr(const u32 instr) {
         case PRIMARY_STFS:
             STFS(instr);
             break;
+        case PRIMARY_STFD:
+            STFD(instr);
+            break;
         case PRIMARY_PSQL:
             PSQL(instr);
             break;
@@ -2652,20 +2998,50 @@ static void ExecInstr(const u32 instr) {
             PSQST(instr);
             break;
         case PRIMARY_FLOAT:
-            switch (XO) {
-                case FLOAT_MTFSB1:
-                    MTFSB1(instr);
+            switch (FXO) {
+                case FLOAT_FDIV:
+                    FDIV(instr);
                     break;
-                case FLOAT_FMR:
-                    FMR(instr);
+                case FLOAT_FSUB:
+                    FSUB(instr);
                     break;
-                case FLOAT_MTFSF:
-                    MTFSF(instr);
+                case FLOAT_FADD:
+                    FADD(instr);
+                    break;
+                case FLOAT_FMUL:
+                    FMUL(instr);
+                    break;
+                case FLOAT_FMSUB:
+                    FMSUB(instr);
+                    break;
+                case FLOAT_FMADD:
+                    FMADD(instr);
                     break;
                 default:
-                    printf("Unimplemented Broadway float opcode %u (IA: %08X, instruction: %08X)\n", XO, CIA, instr);
+                    switch (XO) {
+                        case FLOAT_FCMPU:
+                            FCMPU(instr);
+                            break;
+                        case FLOAT_FCTIWZ:
+                            FCTIWZ(instr);
+                            break;
+                        case FLOAT_MTFSB1:
+                            MTFSB1(instr);
+                            break;
+                        case FLOAT_FNEG:
+                            FNEG(instr);
+                            break;
+                        case FLOAT_FMR:
+                            FMR(instr);
+                            break;
+                        case FLOAT_MTFSF:
+                            MTFSF(instr);
+                            break;
+                        default:
+                            printf("Unimplemented Broadway float opcode %u (IA: %08X, instruction: %08X)\n", XO, CIA, instr);
 
-                    exit(1);
+                            exit(1);
+                    }
             }
             break;
         default:
